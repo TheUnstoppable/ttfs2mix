@@ -68,7 +68,8 @@ namespace Ttfs2Mix
                 switch(args[0].ToLower(Data.DefaultCulture))
                 {
                     case "help":
-                        Console.WriteLine("\"convert <Package ID/Package Name>\": Converts TTFS package to MIX file and saves into data folder.");
+                        Console.WriteLine("\"convert <Package ID/Package Name>\": Converts first occurence of TTFS package to MIX file and saves into data folder.");
+                        Console.WriteLine("\"multiconvert <Package ID/Package Name>\": Converts all matched TTFS packages to MIX files and saves into data folder.");
                         Console.WriteLine("\"convertall\": Converts all TTFS packages to MIX and saves all into data folder.");
                         Console.WriteLine("\"help\": Prints the list of available commands.");
                         Console.WriteLine("\"info\": Shows information about utility and used libraries.");
@@ -91,7 +92,14 @@ namespace Ttfs2Mix
 
                     case "convertall":
                         ProgressStatisticClass.Mode = 1;
-                        Worker = new Thread(ConvertAll);
+                        Worker = new Thread(() => ConvertAll());
+                        Worker.IsBackground = true;
+                        Worker.Start();
+                        break;
+
+                    case "multiconvert":
+                        ProgressStatisticClass.Mode = 2;
+                        Worker = new Thread(() => MultiConvert(string.Join(" ", args.Skip(1))));
                         Worker.IsBackground = true;
                         Worker.Start();
                         break;
@@ -140,6 +148,8 @@ namespace Ttfs2Mix
                         ConsoleOutputList.RemoveAt(0);
                     }
                 }
+
+                Console.WriteLine($"Conversion done{(ProgressStatisticClass.MIXTotal - ProgressStatisticClass.MIXIndex > 0 ? $" with {ProgressStatisticClass.MIXTotal - ProgressStatisticClass.MIXIndex} failed packages." : ".")}");
             }
             else
             {
@@ -179,51 +189,81 @@ namespace Ttfs2Mix
                           .Equals(Name);
         }
 
-        internal static void Convert(string Package, TTFSDataClass? TTFSData = null)
+        private static void CheckFields(ref TTFSDataClass? TTFSData)
         {
-            TTFSDataClass TTFS = default;
+            TTFSData = default;
 
-            if(!Paths.HasValue)
+            if (!Paths.HasValue)
                 Paths = Data.ReadPaths();
 
-            if(TTFSFolder == null)
+            if (TTFSFolder == null)
                 TTFSFolder = Data.GetTTFSDirectory(Paths.Value);
 
-            if(!TTFSData.HasValue)
+            if (!TTFSData.HasValue)
             {
-                try
+                if (TTFSFolder != null)
                 {
-                    TTFS = TTFSClass.FromFile(Path.Combine(TTFSFolder, "packages.dat"));
+                    try
+                    {
+                        TTFSData = TTFSClass.FromFile(Path.Combine(TTFSFolder, "packages.dat"));
+                    }
+                    catch (Exception ex)
+                    {
+                        ConsoleOutputList.Add($"Error: {ex.Message}");
+                        ProgressStatisticClass.IsDone = true;
+                        return;
+                    }
                 }
-                catch (Exception ex)
+                else
                 {
-                    ConsoleOutputList.Add($"Error: {ex.Message}");
+                    ConsoleOutputList.Add($"Could not auto-detect TTFS folder. Please make sure you are running this utility from root directory game/server folder.");
                     ProgressStatisticClass.IsDone = true;
-                    return;
                 }
             }
             else
             {
+                TTFSData = TTFSData.Value;
+            }
+        }
+
+        internal static void Convert(string Package, TTFSDataClass? TTFSData = null)
+        {
+            CheckFields(ref TTFSData);
+
+            TTFSDataClass TTFS;
+
+            if (TTFSData.HasValue)
+            {
                 TTFS = TTFSData.Value;
+            }
+            else
+            {
+                if (ProgressStatisticClass.Mode == 0)
+                    ProgressStatisticClass.IsDone = true;
+
+                return;
             }
 
             TPIPackageClass TPI = default;
-            if(TTFS.Packages.FindAll(x => PackageIDCheck(x, Package)).Count == 1) //ID Match
+            var IDMatch = TTFS.Packages.FindAll(x => PackageIDCheck(x, Package));
+            var NameMatch = TTFS.Packages.FindAll(x => PackageNameCheck(x, Package));
+
+            if (IDMatch.Count == 1) //ID Match
             {
-                TPI = TTFS.Packages.Find(x => PackageIDCheck(x, Package));
+                TPI = IDMatch.First();
             }
-            else if (TTFS.Packages.FindAll(x => PackageNameCheck(x, Package)).Count == 1) //Name Match
+            else if (NameMatch.Count == 1) //Name Match
             {
-                TPI = TTFS.Packages.Find(x => PackageNameCheck(x, Package));
+                TPI = NameMatch.First();
             }
-            else if (TTFS.Packages.FindAll(x => PackageIDCheck(x, Package)).Count > 1) //Too many ID match
+            else if (IDMatch.Count > 1) //Too many ID match
             {
                 ConsoleOutputList.Add($"Too many matches found with specified identifier \"{Package}\".");
                 if (ProgressStatisticClass.Mode == 0)
                     ProgressStatisticClass.IsDone = true;
                 return;
             }
-            else if (TTFS.Packages.FindAll(x => PackageNameCheck(x, Package)).Count > 1) //Too many Name match
+            else if (NameMatch.Count > 1) //Too many Name match
             {
                 ConsoleOutputList.Add($"Too many matches found with specified identifier \"{Package}\".");
                 if (ProgressStatisticClass.Mode == 0)
@@ -238,7 +278,7 @@ namespace Ttfs2Mix
                 return;
             }
 
-            ProgressStatisticClass.CurrentPackage = TPI.PackageName;
+            ProgressStatisticClass.CurrentPackage = $"{TPI.PackageName} ({TPI.PackageID})";
             ProgressStatisticClass.TotalFileCount = TPI.FileCount;
             ProgressStatisticClass.FileCountIndex = 0;
 
@@ -250,7 +290,7 @@ namespace Ttfs2Mix
                     MIXPackage.Files.Add(new MixFileClass
                     {
                         FileName = TTFile.FileName,
-                        Data = File.ReadAllBytes(Path.Combine(TTFSFolder, "files", TTFile.FullName))
+                        Data = File.ReadAllBytes(Path.Combine(TTFSFolder, "files", TTFile.FullName.Replace("\\", "_")))
                     });
                 }
                 catch(Exception ex)
@@ -263,7 +303,7 @@ namespace Ttfs2Mix
 
             var SaveLoc = Path.Combine(Data.ExeLocation, "Data", $"{TPI.PackageName}.mix");
             MixClass.Save(MIXPackage, SaveLoc);
-            ConsoleOutputList.Add(TPI.PackageName);
+            ConsoleOutputList.Add($"+ {TPI.PackageName} ({TPI.PackageID})");
 
             ProgressStatisticClass.MIXIndex++;
 
@@ -271,26 +311,24 @@ namespace Ttfs2Mix
                 ProgressStatisticClass.IsDone = true;
         }
 
-        internal static void ConvertAll()
+        internal static void ConvertAll(TTFSDataClass? TTFSData = null)
         {
-            Paths = Data.ReadPaths();
-            TTFSFolder = Data.GetTTFSDirectory(Paths.Value);
+            CheckFields(ref TTFSData);
 
-            if (TTFSFolder != null)
+            TTFSDataClass TTFS;
+
+            if (TTFSData.HasValue)
             {
-                TTFSDataClass TTFS;
+                TTFS = TTFSData.Value;
+            }
+            else
+            {
+                ProgressStatisticClass.IsDone = true;
+                return;
+            }
 
-                try
-                {
-                    TTFS = TTFSClass.FromFile(Path.Combine(TTFSFolder, "packages.dat"));
-                }
-                catch(Exception ex)
-                {
-                    ConsoleOutputList.Add($"Error: {ex.Message}");
-                    ProgressStatisticClass.IsDone = true;
-                    return;
-                }
-
+            if (!ProgressStatisticClass.IsDone)
+            {
                 ProgressStatisticClass.MIXTotal = TTFS.PackageCount;
 
                 foreach (TPIPackageClass Package in TTFS.Packages)
@@ -298,9 +336,45 @@ namespace Ttfs2Mix
                     Convert(Package.PackageID, TTFS);
                 }
             }
+
+            ProgressStatisticClass.IsDone = true;
+        }
+
+        internal static void MultiConvert(string Package, TTFSDataClass? TTFSData = null)
+        {
+            CheckFields(ref TTFSData);
+
+            TTFSDataClass TTFS;
+
+            if (TTFSData.HasValue)
+            {
+                TTFS = TTFSData.Value;
+            }
             else
             {
-                ConsoleOutputList.Add($"Could not auto-detect TTFS folder. Please make sure you are running this utility from root directory game/server folder.");
+                ProgressStatisticClass.IsDone = true;
+                return;
+            }
+
+            if (!ProgressStatisticClass.IsDone)
+            {
+                var Matches = TTFS.Packages.Where(x => x.PackageName.ToLower(Data.DefaultCulture).Contains(Package.ToLower(Data.DefaultCulture)) ||
+                                                                               x.PackageID.ToLower(Data.DefaultCulture).Contains(Package.ToLower(Data.DefaultCulture)));
+
+                ProgressStatisticClass.MIXTotal = Matches.Count();
+
+                if(Matches.Count() < 1)
+                {
+                    ConsoleOutputList.Add($"Couldn't find any package with specified identifier \"{Package}\".");
+                    ProgressStatisticClass.IsDone = true;
+
+                    return;
+                }
+
+                foreach (TPIPackageClass TTPackage in Matches)
+                {
+                    Convert(TTPackage.PackageID, TTFS);
+                }
             }
 
             ProgressStatisticClass.IsDone = true;
