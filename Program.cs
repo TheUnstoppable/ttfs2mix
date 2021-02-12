@@ -191,7 +191,7 @@ namespace Ttfs2Mix
         #region Helpers
         static string GenerateSpace(int val)
         {
-            return new string(' ', val);
+            return new string(' ', val < 0 ? 0 : val);
         }
         
         static void ResetCurrentLine()
