@@ -47,12 +47,14 @@ namespace Ttfs2Mix
         //Application
 
         private static Thread Worker;
-
         internal static List<string> ConsoleOutputList = new List<string>();
+
+        //Version
+        public static readonly string Version = "1.1";
 
         public static void Main(string[] args)
         {
-            Console.WriteLine("Ttfs2Mix utility 1.1 - by Unstoppable");
+            Console.WriteLine($"Ttfs2Mix utility {Version} - by Unstoppable");
 
             EmbeddedAssembly.Load("Ttfs2Mix.MixLibrary.dll", "MixLibrary.dll");
             EmbeddedAssembly.Load("Ttfs2Mix.TTPackageClass.dll", "TTPackageClass.dll");
