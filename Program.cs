@@ -84,7 +84,7 @@ namespace Ttfs2Mix
                         return;
 
                     case "info":
-                        Console.WriteLine("Ttfs2Mix is a application to convert TTFS packages into MIX files made by Unstoppable. Supports working with client and server.");
+                        Console.WriteLine("Ttfs2Mix is an application to convert TTFS packages into MIX files made by Unstoppable. Supports working with client and FDS.");
                         Console.WriteLine("Ttfs2Mix uses MixLibrary 1.0 by Unstoppable");
                         Console.WriteLine("Ttfs2Mix uses TTPackageClass 1.0 by Unstoppable");
                         Console.WriteLine("Ttfs2Mix uses EmbeddedAssembly.cs class from https://www.codeproject.com/Articles/528178/Load-DLL-From-Embedded-Resource");
