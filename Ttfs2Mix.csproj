@@ -53,6 +53,7 @@
   <ItemGroup>
     <Compile Include="Data.cs" />
     <Compile Include="EmbeddedAssembly.cs" />
+    <Compile Include="WebDownloader.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

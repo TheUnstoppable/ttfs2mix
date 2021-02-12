@@ -14,6 +14,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Reflection;
 using System.Security.AccessControl;
 using System.Text;
@@ -28,8 +29,10 @@ namespace Ttfs2Mix
         public static int MIXIndex = 0; //Count to handle
         public static int MIXTotal = 0; //Total to handle
 
-        public static int FileCountIndex = 0; //Count to handle
-        public static int TotalFileCount = 0; //Total to handle
+        public static ulong FileCountIndex = 0; //Count to handle
+        public static ulong TotalFileCount = 0; //Total to handle
+
+        public static string StatusText = string.Empty;
 
         public static string CurrentPackage = string.Empty;
         public static bool IsDone = false;
@@ -73,6 +76,9 @@ namespace Ttfs2Mix
                         Console.WriteLine("\"convert <Package ID/Package Name>\": Converts first occurence of TTFS package to MIX file and saves into data folder.");
                         Console.WriteLine("\"multiconvert <Package ID/Package Name>\": Converts all matched TTFS packages to MIX files and saves into data folder.");
                         Console.WriteLine("\"convertall\": Converts all TTFS packages to MIX and saves all into data folder.");
+                        Console.WriteLine("\"download <Package ID/Package Name> <URL>\": Finds and downloads first occurence of TTFS package from a remote repository to MIX file and saves into data folder.");
+                        Console.WriteLine("\"multidownload <Package ID/Package Name> <URL>\": Finds and downloads all matched TTFS packages from a remote repository to MIX files and saves into data folder.");
+                        Console.WriteLine("\"downloadall <URL>\": Finds and downloads all TTFS packages from a remote repository to MIX files and saves all into data folder.");
                         Console.WriteLine("\"help\": Prints the list of available commands.");
                         Console.WriteLine("\"info\": Shows information about utility and used libraries.");
                         return;
@@ -106,6 +112,28 @@ namespace Ttfs2Mix
                         Worker.Start();
                         break;
 
+                    case "download":
+                        ProgressStatisticClass.MIXTotal = 1;
+                        ProgressStatisticClass.Mode = 3;
+                        Worker = new Thread(async () => await Download(string.Join(" ", args.Skip(1).Take(args.Length - 2)), args.Last()));
+                        Worker.IsBackground = true;
+                        Worker.Start();
+                        break;
+
+                    case "multidownload":
+                        ProgressStatisticClass.Mode = 4;
+                        Worker = new Thread(async () => await MultiDownload(string.Join(" ", args.Skip(1).Take(args.Length - 2)), args.Last()));
+                        Worker.IsBackground = true;
+                        Worker.Start();
+                        break;
+
+                    case "downloadall":
+                        ProgressStatisticClass.Mode = 5;
+                        Worker = new Thread(async () => await DownloadAll(string.Join(" ", args.Skip(1))));
+                        Worker.IsBackground = true;
+                        Worker.Start();
+                        break;
+
                     default:
                         Console.WriteLine("You have specified an invalid command. Please run this application with \"help\" parameter for commands.");
                         return;
@@ -115,8 +143,8 @@ namespace Ttfs2Mix
                 {
                     LoadState++;
 
-                    int val = ProgressStatisticClass.FileCountIndex;
-                    int max = ProgressStatisticClass.TotalFileCount;
+                    ulong val = ProgressStatisticClass.FileCountIndex;
+                    ulong max = ProgressStatisticClass.TotalFileCount;
 
                     if (max > 0)
                         PBarVal = (int)Math.Floor(((double)val / (double)max) * PBarMax);
@@ -140,7 +168,7 @@ namespace Ttfs2Mix
                             break;
                     }
 
-                    Console.Write($"{ProgressStatisticClass.CurrentPackage} ({val}/{max}) [{new string('#', PBarVal)}{GenerateSpace(PBarMax - PBarVal)}]");
+                    Console.Write($"{ProgressStatisticClass.CurrentPackage} ({(!string.IsNullOrEmpty(ProgressStatisticClass.StatusText) ? ProgressStatisticClass.StatusText : $"{val}/{max}")}) [{new string('#', PBarVal)}{GenerateSpace(PBarMax - PBarVal)}]");
                     Thread.Sleep(100);
 
                     ResetCurrentLine();
@@ -160,6 +188,7 @@ namespace Ttfs2Mix
             }
         }
 
+        #region Helpers
         static string GenerateSpace(int val)
         {
             return new string(' ', val);
@@ -228,9 +257,50 @@ namespace Ttfs2Mix
             }
         }
 
+        private static int ExceptionToHTTPCode(WebException ex)
+        {
+            try
+            {
+                string Number = ex.Message;
+                Number = Number.Remove(0, Number.Length - 4);
+                Number = Number.Substring(Number.Length - 1, 1);
+                return int.Parse(Number);
+            }
+            catch
+            {
+                return -1;
+            }
+        }
+
+        private static void PrintHTTPErrorInfo(int Status)
+        {
+            switch (Status)
+            {
+                case 401: //Forbidden
+                    ConsoleOutputList.Add($"Authorization required to view this location. Please make sure server allows ttfs2mix or you have permission to access.");
+                    break;
+                case 404: //Not found
+                    ConsoleOutputList.Add($"Unable to find a TTFS repository at the specified location. Please make sure entered URL is correct.");
+                    break;
+                case 403: //Forbidden
+                    ConsoleOutputList.Add($"Server forbid access to this location. Please make sure server allows ttfs2mix or you have permission to access.");
+                    break;
+                case 500: //Server error
+                    ConsoleOutputList.Add($"An internal server error occured while requesting TTFS packages. Please try again later.");
+                    break;
+                default:
+                    ConsoleOutputList.Add($"Server sent an unrecognized status code of {Status}. Please make sure server allows ttfs2mix, or try again later.");
+                    break;
+            }
+        }
+        #endregion
+
+        #region Commands
         internal static void Convert(string Package, TTFSDataClass? TTFSData = null)
         {
             CheckFields(ref TTFSData);
+
+            ProgressStatisticClass.StatusText = "Locating...";
 
             TTFSDataClass TTFS;
 
@@ -281,8 +351,10 @@ namespace Ttfs2Mix
             }
 
             ProgressStatisticClass.CurrentPackage = $"{TPI.PackageName} ({TPI.PackageID})";
-            ProgressStatisticClass.TotalFileCount = TPI.FileCount;
+            ProgressStatisticClass.TotalFileCount = (ulong)TPI.FileCount;
             ProgressStatisticClass.FileCountIndex = 0;
+
+            ProgressStatisticClass.StatusText = string.Empty;
 
             MixPackageClass MIXPackage = MixClass.CreateMIX();
             foreach(TTFileClass TTFile in TPI.Files)
@@ -302,6 +374,8 @@ namespace Ttfs2Mix
 
                 ProgressStatisticClass.FileCountIndex++;
             }
+
+            ProgressStatisticClass.StatusText = "Saving...";
 
             var SaveLoc = Path.Combine(Data.ExeLocation, "Data", $"{TPI.PackageName}.mix");
             MixClass.Save(MIXPackage, SaveLoc);
@@ -381,5 +455,232 @@ namespace Ttfs2Mix
 
             ProgressStatisticClass.IsDone = true;
         }
+
+        internal static async Task Download(string Package, string Location, TTFSDataClass? TTFSData = null)
+        {
+            ProgressStatisticClass.StatusText = "Fetching packages...";
+
+            if (TTFSData == null)
+            {
+                try
+                {
+                    byte[] Data = await WebDownloader.GetBytesAsync($"{Location}/packages.dat");
+                    TTFSData = TTFSClass.FromBytes(Data);
+                }
+                catch (WebException webex)
+                {
+                    int Status = ExceptionToHTTPCode(webex);
+
+                    if (Status > 0)
+                    {
+                        PrintHTTPErrorInfo(Status);
+                    }
+
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    ConsoleOutputList.Add($"Error: {ex.Message}");
+                    ProgressStatisticClass.IsDone = true;
+                    return;
+                }
+            }
+
+            TTFSDataClass TTFS = TTFSData.Value;
+
+            TPIPackageClass TPI = default;
+            var IDMatch = TTFS.Packages.FindAll(x => PackageIDCheck(x, Package));
+            var NameMatch = TTFS.Packages.FindAll(x => PackageNameCheck(x, Package));
+
+            if (IDMatch.Count == 1) //ID Match
+            {
+                TPI = IDMatch.First();
+            }
+            else if (NameMatch.Count == 1) //Name Match
+            {
+                TPI = NameMatch.First();
+            }
+            else if (IDMatch.Count > 1) //Too many ID match
+            {
+                ConsoleOutputList.Add($"Too many matches found with specified identifier \"{Package}\".");
+                if (ProgressStatisticClass.Mode == 3)
+                    ProgressStatisticClass.IsDone = true;
+                return;
+            }
+            else if (NameMatch.Count > 1) //Too many Name match
+            {
+                ConsoleOutputList.Add($"Too many matches found with specified identifier \"{Package}\".");
+                if (ProgressStatisticClass.Mode == 3)
+                    ProgressStatisticClass.IsDone = true;
+                return;
+            }
+            else
+            {
+                ConsoleOutputList.Add($"Couldn't find any package with specified identifier \"{Package}\".");
+                if (ProgressStatisticClass.Mode == 3)
+                    ProgressStatisticClass.IsDone = true;
+                return;
+            }
+
+            ProgressStatisticClass.CurrentPackage = $"{TPI.PackageName} ({TPI.PackageID})";
+            ProgressStatisticClass.TotalFileCount = (ulong)TPI.Files.Sum(x => x.FileSize);
+            ProgressStatisticClass.FileCountIndex = 0;
+
+            ProgressStatisticClass.StatusText = $"Downloading...";
+
+            int fileindex = 0;
+            int totalfiles = TPI.FileCount;
+
+            MixPackageClass MIXPackage = MixClass.CreateMIX();
+            foreach(TTFileClass File in TPI.Files)
+            {
+                byte[] Data = new byte[File.FileSize];
+
+                try
+                {
+                    Data = await WebDownloader.GetBytesAsync($"{Location}/files/{Uri.EscapeUriString($"{File.CRC}.{File.FileName}")}");
+
+                    MIXPackage.Files.Add(new MixFileClass
+                    {
+                        FileName = File.FileName,
+                        Data = Data
+                    });
+
+                    ProgressStatisticClass.FileCountIndex += (ulong)Data.Length;
+                }
+                catch(Exception ex)
+                {
+                    if(ex is WebException)
+                    {
+                        int Status = ExceptionToHTTPCode((WebException)ex);
+                        ConsoleOutputList.Add($"Skipping file {File.FileName} in package {TPI.PackageName}: Server returns {Status}.");
+                    }
+                    else
+                    {
+                        ConsoleOutputList.Add($"Skipping file {File.FileName} in package {TPI.PackageName}: {ex.Message}.");
+                    }
+
+                    ProgressStatisticClass.FileCountIndex += File.FileSize;
+                }
+
+                fileindex++;
+                ProgressStatisticClass.StatusText = $"Downloading... ({fileindex}/{totalfiles} | {WebDownloader.ParseSize((long)ProgressStatisticClass.FileCountIndex)}/{WebDownloader.ParseSize((long)ProgressStatisticClass.TotalFileCount)})";
+            }
+
+            ProgressStatisticClass.StatusText = "Saving...";
+
+            var SaveLoc = Path.Combine(Data.ExeLocation, "Data", $"{TPI.PackageName}.mix");
+            MixClass.Save(MIXPackage, SaveLoc);
+            ConsoleOutputList.Add($"+ {TPI.PackageName} ({TPI.PackageID})");
+
+            ProgressStatisticClass.MIXIndex++;
+
+            GC.Collect();
+
+            if (ProgressStatisticClass.Mode == 3)
+                ProgressStatisticClass.IsDone = true;
+        }
+
+        internal static async Task MultiDownload(string Package, string Location, TTFSDataClass? TTFSData = null)
+        {
+            ProgressStatisticClass.StatusText = "Fetching packages...";
+
+            if (TTFSData == null)
+            {
+                try
+                {
+                    byte[] Data = await WebDownloader.GetBytesAsync($"{Location}/packages.dat");
+                    TTFSData = TTFSClass.FromBytes(Data);
+                }
+                catch (WebException webex)
+                {
+                    int Status = ExceptionToHTTPCode(webex);
+
+                    if (Status > 0)
+                    {
+                        PrintHTTPErrorInfo(Status);
+                    }
+
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    ConsoleOutputList.Add($"Error: {ex.Message}");
+                    ProgressStatisticClass.IsDone = true;
+                    return;
+                }
+            }
+
+            TTFSDataClass TTFS = TTFSData.Value;
+
+            if (!ProgressStatisticClass.IsDone)
+            {
+                var Matches = TTFS.Packages.Where(x => x.PackageName.ToLower(Data.DefaultCulture).Contains(Package.ToLower(Data.DefaultCulture)) ||
+                                                                               x.PackageID.ToLower(Data.DefaultCulture).Contains(Package.ToLower(Data.DefaultCulture)));
+
+                ProgressStatisticClass.MIXTotal = Matches.Count();
+
+                if (Matches.Count() < 1)
+                {
+                    ConsoleOutputList.Add($"Couldn't find any package with specified identifier \"{Package}\".");
+                    ProgressStatisticClass.IsDone = true;
+
+                    return;
+                }
+
+                foreach (TPIPackageClass TTPackage in Matches)
+                {
+                    await Download(TTPackage.PackageID, Location, TTFS);
+                }
+            }
+
+            ProgressStatisticClass.IsDone = true;
+        }
+
+        internal static async Task DownloadAll(string Location, TTFSDataClass? TTFSData = null)
+        {
+            ProgressStatisticClass.StatusText = "Fetching packages...";
+
+            if (TTFSData == null)
+            {
+                try
+                {
+                    byte[] Data = await WebDownloader.GetBytesAsync($"{Location}/packages.dat");
+                    TTFSData = TTFSClass.FromBytes(Data);
+                }
+                catch (WebException webex)
+                {
+                    int Status = ExceptionToHTTPCode(webex);
+
+                    if (Status > 0)
+                    {
+                        PrintHTTPErrorInfo(Status);
+                    }
+
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    ConsoleOutputList.Add($"Error: {ex.Message}");
+                    ProgressStatisticClass.IsDone = true;
+                    return;
+                }
+            }
+
+            TTFSDataClass TTFS = TTFSData.Value;
+
+            if (!ProgressStatisticClass.IsDone)
+            {
+                ProgressStatisticClass.MIXTotal = TTFS.PackageCount;
+
+                foreach (TPIPackageClass Pkg in TTFS.Packages)
+                {
+                    await Download(Pkg.PackageID, Location, TTFS);
+                }
+            }
+
+            ProgressStatisticClass.IsDone = true;
+        }
+        #endregion
     }
 }
