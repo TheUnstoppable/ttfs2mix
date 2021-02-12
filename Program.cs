@@ -139,6 +139,7 @@ namespace Ttfs2Mix
                         return;
                 }
 
+                Console.CursorVisible = false;
                 while(!ProgressStatisticClass.IsDone)
                 {
                     LoadState++;
@@ -178,6 +179,7 @@ namespace Ttfs2Mix
                         ConsoleOutputList.RemoveAt(0);
                     }
                 }
+                Console.CursorVisible = true;
 
                 Console.WriteLine($"Conversion done{(ProgressStatisticClass.MIXTotal - ProgressStatisticClass.MIXIndex > 0 ? $" with {ProgressStatisticClass.MIXTotal - ProgressStatisticClass.MIXIndex} failed packages." : ".")}");
             }
