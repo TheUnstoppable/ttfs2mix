@@ -84,10 +84,15 @@ namespace Ttfs2Mix
                         return;
 
                     case "info":
-                        Console.WriteLine("Ttfs2Mix is an application to convert TTFS packages into MIX files made by Unstoppable. Supports working with client and FDS.");
-                        Console.WriteLine("Ttfs2Mix uses MixLibrary 1.0 by Unstoppable");
-                        Console.WriteLine("Ttfs2Mix uses TTPackageClass 1.0 by Unstoppable");
-                        Console.WriteLine("Ttfs2Mix uses EmbeddedAssembly.cs class from https://www.codeproject.com/Articles/528178/Load-DLL-From-Embedded-Resource");
+                        Console.WriteLine("Ttfs2Mix is an application to convert TTFS packages into MIX files made by Unstoppable. Supports both client and FDS.");
+                        Console.WriteLine("Ttfs2Mix has to be located inside client or FDS folder in order to work. Converted maps will be saved in Data folder.");
+                        Console.WriteLine();
+                        Console.WriteLine("Ttfs2Mix contains code snippets and libraries from following sources:");
+                        Console.WriteLine("MixLibrary 1.2 - https://github.com/TheUnstoppable/MixLibrary");
+                        Console.WriteLine("TTPackageClass 1.3 - https://github.com/TheUnstoppable/TTPackageClass");
+                        Console.WriteLine("EmbeddedAssembly.cs - https://www.codeproject.com/Articles/528178/Load-DLL-From-Embedded-Resource");
+                        Console.WriteLine("ParseSize - https://stackoverflow.com/a/14488941/5791443");
+                        Console.WriteLine("ReadToEnd extension for Stream - https://stackoverflow.com/a/1080445/5791443");
                         return;
 
                     case "convert":

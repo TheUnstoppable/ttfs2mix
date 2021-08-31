@@ -45,7 +45,7 @@ namespace Ttfs2Mix
             }
         }
 
-        //https://stackoverflow.com/questions/14488796/does-net-provide-an-easy-way-convert-bytes-to-kb-mb-gb-etc
+        //https://stackoverflow.com/a/14488941/5791443
         public static string ParseSize(long value, int decimalPlaces = 2)
         {
             if (decimalPlaces < 0) { throw new ArgumentOutOfRangeException("decimalPlaces"); }
@@ -125,6 +125,7 @@ namespace Ttfs2Mix
             }
         }
 
+        //https://stackoverflow.com/a/14488941/5791443
         internal static readonly string[] SizeSuffixes =
            { "bytes", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB" };
     }
