@@ -358,7 +358,7 @@ namespace Ttfs2Mix
 
             ProgressStatisticClass.StatusText = string.Empty;
 
-            MixPackageClass MIXPackage = MixClass.CreateMIX();
+            MixPackageClass MIXPackage = MixPackageClass.CreateMIX();
             foreach(TTFileClass TTFile in TPI.Files)
             {
                 try
@@ -380,7 +380,7 @@ namespace Ttfs2Mix
             ProgressStatisticClass.StatusText = "Saving...";
 
             var SaveLoc = Path.Combine(Data.ExeLocation, "Data", $"{TPI.PackageName}.mix");
-            MixClass.Save(MIXPackage, SaveLoc);
+            MIXPackage.Save(SaveLoc);
             ConsoleOutputList.Add($"+ {TPI.PackageName} ({TPI.PackageID})");
 
             ProgressStatisticClass.MIXIndex++;
@@ -533,7 +533,7 @@ namespace Ttfs2Mix
             int fileindex = 0;
             int totalfiles = TPI.FileCount;
 
-            MixPackageClass MIXPackage = MixClass.CreateMIX();
+            MixPackageClass MIXPackage = MixPackageClass.CreateMIX();
             foreach(TTFileClass File in TPI.Files)
             {
                 byte[] Data = new byte[File.FileSize];
@@ -572,7 +572,7 @@ namespace Ttfs2Mix
             ProgressStatisticClass.StatusText = "Saving...";
 
             var SaveLoc = Path.Combine(Data.ExeLocation, "Data", $"{TPI.PackageName}.mix");
-            MixClass.Save(MIXPackage, SaveLoc);
+            MIXPackage.Save(SaveLoc);
             ConsoleOutputList.Add($"+ {TPI.PackageName} ({TPI.PackageID})");
 
             ProgressStatisticClass.MIXIndex++;
