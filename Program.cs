@@ -53,7 +53,7 @@ namespace Ttfs2Mix
         internal static List<string> ConsoleOutputList = new List<string>();
 
         //Version
-        public static readonly string Version = "1.1";
+        public static readonly string Version = "1.2";
 
         public static void Main(string[] args)
         {
