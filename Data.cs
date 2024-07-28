@@ -10,13 +10,9 @@
 
 
 using System;
-using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
-using System.Linq;
 using System.Reflection;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Ttfs2Mix
 {
@@ -30,15 +26,8 @@ namespace Ttfs2Mix
 
     internal static class Data
     {
-        public static CultureInfo DefaultCulture // To fix upper-lower wrong character issues.
-        {
-            get => CultureInfo.InvariantCulture;
-        }
-
-        public static string ExeLocation
-        {
-            get => Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-        }
+        public static CultureInfo DefaultCulture => CultureInfo.InvariantCulture; // To fix upper-lower wrong character issues.
+        public static string ExeLocation => Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
 
         public static PathsStruct ReadPaths()
         {
@@ -134,7 +123,7 @@ namespace Ttfs2Mix
             }
             catch(Exception ex)
             {
-                if (ex is ArgumentException || ex is ArgumentNullException)
+                if (ex is ArgumentException or ArgumentNullException)
                 {
                     return null;
                 }

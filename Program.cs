@@ -14,11 +14,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Net;
 using System.Net.Http;
-using System.Reflection;
-using System.Security.AccessControl;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using TTPackageClass;
@@ -27,16 +23,16 @@ namespace Ttfs2Mix
 {
     static class ProgressStatisticClass
     {
-        public static int MIXIndex = 0; //Count to handle
-        public static int MIXTotal = 0; //Total to handle
+        public static int MIXIndex; //Count to handle
+        public static int MIXTotal; //Total to handle
 
-        public static ulong FileCountIndex = 0; //Count to handle
-        public static ulong TotalFileCount = 0; //Total to handle
+        public static ulong FileCountIndex; //Count to handle
+        public static ulong TotalFileCount; //Total to handle
 
         public static string StatusText = string.Empty;
 
         public static string CurrentPackage = string.Empty;
-        public static bool IsDone = false;
+        public static bool IsDone;
         public static int Mode = -1;
     }
 
@@ -44,14 +40,14 @@ namespace Ttfs2Mix
     {
         //Values for fancy stuff
 
-        static int LoadState = 0; // the spinning line
+        static int LoadState; // the spinning line
         static int PBarMax = 20;
-        static int PBarVal = 0;
+        static int PBarVal;
 
         //Application
 
         private static Thread Worker;
-        internal static List<string> ConsoleOutputList = new List<string>();
+        internal static List<string> ConsoleOutputList = new();
 
         //Version
         public static readonly string Version = "1.2";
@@ -64,10 +60,7 @@ namespace Ttfs2Mix
             EmbeddedAssembly.Load("Ttfs2Mix.TTPackageClass.dll", "TTPackageClass.dll");
 
             //Load dependencies from embedded resource, to make it a single executable file.
-            AppDomain.CurrentDomain.AssemblyResolve += (sender, e) =>
-            {
-                return EmbeddedAssembly.Get(e.Name);
-            };
+            AppDomain.CurrentDomain.AssemblyResolve += (_, e) => EmbeddedAssembly.Get(e.Name);
 
             if (args.Length >= 1)
             {
@@ -99,44 +92,56 @@ namespace Ttfs2Mix
                     case "convert":
                         ProgressStatisticClass.MIXTotal = 1;
                         ProgressStatisticClass.Mode = 0;
-                        Worker = new Thread(() => Convert(string.Join(" ", args.Skip(1))));
-                        Worker.IsBackground = true;
+                        Worker = new Thread(() => Convert(string.Join(" ", args.Skip(1))))
+                        {
+                            IsBackground = true
+                        };
                         Worker.Start();
                         break;
 
                     case "convertall":
                         ProgressStatisticClass.Mode = 1;
-                        Worker = new Thread(() => ConvertAll());
-                        Worker.IsBackground = true;
+                        Worker = new Thread(() => ConvertAll())
+                        {
+                            IsBackground = true
+                        };
                         Worker.Start();
                         break;
 
                     case "multiconvert":
                         ProgressStatisticClass.Mode = 2;
-                        Worker = new Thread(() => MultiConvert(string.Join(" ", args.Skip(1))));
-                        Worker.IsBackground = true;
+                        Worker = new Thread(() => MultiConvert(string.Join(" ", args.Skip(1))))
+                        {
+                            IsBackground = true
+                        };
                         Worker.Start();
                         break;
 
                     case "download":
                         ProgressStatisticClass.MIXTotal = 1;
                         ProgressStatisticClass.Mode = 3;
-                        Worker = new Thread(async () => await Download(string.Join(" ", args.Skip(1).Take(args.Length - 2)), args.Last()));
-                        Worker.IsBackground = true;
+                        Worker = new Thread(async () => await Download(string.Join(" ", args.Skip(1).Take(args.Length - 2)), args.Last()))
+                        {
+                            IsBackground = true
+                        };
                         Worker.Start();
                         break;
 
                     case "multidownload":
                         ProgressStatisticClass.Mode = 4;
-                        Worker = new Thread(async () => await MultiDownload(string.Join(" ", args.Skip(1).Take(args.Length - 2)), args.Last()));
-                        Worker.IsBackground = true;
+                        Worker = new Thread(async () => await MultiDownload(string.Join(" ", args.Skip(1).Take(args.Length - 2)), args.Last()))
+                        {
+                            IsBackground = true
+                        };
                         Worker.Start();
                         break;
 
                     case "downloadall":
                         ProgressStatisticClass.Mode = 5;
-                        Worker = new Thread(async () => await DownloadAll(string.Join(" ", args.Skip(1))));
-                        Worker.IsBackground = true;
+                        Worker = new Thread(async () => await DownloadAll(string.Join(" ", args.Skip(1))))
+                        {
+                            IsBackground = true
+                        };
                         Worker.Start();
                         break;
 
@@ -232,11 +237,8 @@ namespace Ttfs2Mix
         {
             TTFSData = default;
 
-            if (!Paths.HasValue)
-                Paths = Data.ReadPaths();
-
-            if (TTFSFolder == null)
-                TTFSFolder = Data.GetTTFSDirectory(Paths.Value);
+            Paths ??= Data.ReadPaths();
+            TTFSFolder ??= Data.GetTTFSDirectory(Paths.Value);
 
             if (!TTFSData.HasValue)
             {
@@ -432,12 +434,14 @@ namespace Ttfs2Mix
 
             if (!ProgressStatisticClass.IsDone)
             {
-                var Matches = TTFS.Packages.Where(x => x.PackageName.ToLower(Data.DefaultCulture).Contains(Package.ToLower(Data.DefaultCulture)) ||
-                                                                               x.PackageID.ToLower(Data.DefaultCulture).Contains(Package.ToLower(Data.DefaultCulture)));
+                var Matches = TTFS.Packages.Where(x =>
+                        x.PackageName.ToLower(Data.DefaultCulture).Contains(Package.ToLower(Data.DefaultCulture)) ||
+                        x.PackageID.ToLower(Data.DefaultCulture).Contains(Package.ToLower(Data.DefaultCulture)))
+                    .ToArray();
 
-                ProgressStatisticClass.MIXTotal = Matches.Count();
+                ProgressStatisticClass.MIXTotal = Matches.Length;
 
-                if(Matches.Count() < 1)
+                if(!Matches.Any())
                 {
                     ConsoleOutputList.Add($"Couldn't find any package with specified identifier \"{Package}\".");
                     ProgressStatisticClass.IsDone = true;
@@ -625,12 +629,14 @@ namespace Ttfs2Mix
 
             if (!ProgressStatisticClass.IsDone)
             {
-                var Matches = TTFS.Packages.Where(x => x.PackageName.ToLower(Data.DefaultCulture).Contains(Package.ToLower(Data.DefaultCulture)) ||
-                                                                               x.PackageID.ToLower(Data.DefaultCulture).Contains(Package.ToLower(Data.DefaultCulture)));
+                var Matches = TTFS.Packages.Where(x =>
+                        x.PackageName.ToLower(Data.DefaultCulture).Contains(Package.ToLower(Data.DefaultCulture)) ||
+                        x.PackageID.ToLower(Data.DefaultCulture).Contains(Package.ToLower(Data.DefaultCulture)))
+                    .ToArray();
 
-                ProgressStatisticClass.MIXTotal = Matches.Count();
+                ProgressStatisticClass.MIXTotal = Matches.Length;
 
-                if (Matches.Count() < 1)
+                if (!Matches.Any())
                 {
                     ConsoleOutputList.Add($"Couldn't find any package with specified identifier \"{Package}\".");
                     ProgressStatisticClass.IsDone = true;

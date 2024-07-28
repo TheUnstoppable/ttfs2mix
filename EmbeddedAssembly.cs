@@ -3,7 +3,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Text;
 using System.IO;
 using System.Reflection;
 using System.Security.Cryptography;
@@ -14,15 +13,14 @@ namespace Ttfs2Mix
     {
         // Version 1.3
 
-        static Dictionary<string, Assembly> dic = null;
+        static Dictionary<string, Assembly> dic;
 
         public static void Load(string embeddedResource, string fileName)
         {
-            if (dic == null)
-                dic = new Dictionary<string, Assembly>();
+            dic ??= new Dictionary<string, Assembly>();
 
-            byte[] ba = null;
-            Assembly asm = null;
+            byte[] ba;
+            Assembly asm;
             Assembly curAsm = Assembly.GetExecutingAssembly();
 
             using (Stream stm = curAsm.GetManifestResourceStream(embeddedResource))
@@ -50,12 +48,12 @@ namespace Ttfs2Mix
                 }
             }
 
-            bool fileOk = false;
-            string tempFile = "";
+            bool fileOk;
+            string tempFile;
 
             using (SHA1 sha1 = SHA1.Create())
             {
-                string fileHash = BitConverter.ToString(sha1.ComputeHash(ba)).Replace("-", string.Empty); ;
+                string fileHash = BitConverter.ToString(sha1.ComputeHash(ba)).Replace("-", string.Empty);
 
                 tempFile = Path.GetTempPath() + fileName;
 
@@ -64,14 +62,7 @@ namespace Ttfs2Mix
                     byte[] bb = File.ReadAllBytes(tempFile);
                     string fileHash2 = BitConverter.ToString(sha1.ComputeHash(bb)).Replace("-", string.Empty);
 
-                    if (fileHash == fileHash2)
-                    {
-                        fileOk = true;
-                    }
-                    else
-                    {
-                        fileOk = false;
-                    }
+                    fileOk = fileHash == fileHash2;
                 }
                 else
                 {
@@ -81,7 +72,7 @@ namespace Ttfs2Mix
 
             if (!fileOk)
             {
-                System.IO.File.WriteAllBytes(tempFile, ba);
+                File.WriteAllBytes(tempFile, ba);
             }
 
             asm = Assembly.LoadFile(tempFile);
