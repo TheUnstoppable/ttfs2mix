@@ -12,7 +12,7 @@ namespace Ttfs2Mix
 {
     public static class WebDownloader
     {
-        public static async Task<byte[]> GetBytesAsync(string Url, long ExpectedSize = -1)
+        public static async Task<byte[]> GetBytesAsync(string Url)
         {
             HttpClient client = new HttpClient();
             client.DefaultRequestHeaders.Add("User-Agent", $"ttfs2mix-{Program.Version}");
@@ -26,22 +26,7 @@ namespace Ttfs2Mix
             }
             else
             {
-                byte[] Data;
-
-                using (Stream str = await response.Content.ReadAsStreamAsync())
-                {
-                    if (ExpectedSize == -1)
-                    {
-                        Data = str.ReadToEnd();
-                    }
-                    else
-                    {
-                        Data = new byte[ExpectedSize];
-                        str.Read(Data, 0, Data.Length);
-                    }    
-                }
-
-                return Data;
+                return await response.Content.ReadAsByteArrayAsync();
             }
         }
 

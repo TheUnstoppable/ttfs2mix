@@ -472,6 +472,12 @@ namespace Ttfs2Mix
                     if (Status > 0)
                     {
                         PrintHTTPErrorInfo(Status);
+                        ProgressStatisticClass.IsDone = true;
+                    }
+                    else
+                    {
+                        ConsoleOutputList.Add($"Error: {httpex.Message}");
+                        ProgressStatisticClass.IsDone = true;
                     }
 
                     return;
@@ -550,7 +556,8 @@ namespace Ttfs2Mix
                 {
                     if(ex is HttpRequestException httpex)
                     {
-                        ConsoleOutputList.Add($"Skipping file {File.FileName} in package {TPI.PackageName}: Server returns {ExceptionToHTTPCode(httpex)}.");
+                        int Status = ExceptionToHTTPCode(httpex);
+                        ConsoleOutputList.Add($"Skipping file {File.FileName} in package {TPI.PackageName}: {(Status > 0 ? $"Server returns {Status}" : httpex.Message)}.");
                     }
                     else
                     {
@@ -596,6 +603,12 @@ namespace Ttfs2Mix
                     if (Status > 0)
                     {
                         PrintHTTPErrorInfo(Status);
+                        ProgressStatisticClass.IsDone = true;
+                    }
+                    else
+                    {
+                        ConsoleOutputList.Add($"Error: {httpex.Message}");
+                        ProgressStatisticClass.IsDone = true;
                     }
 
                     return;
@@ -652,6 +665,12 @@ namespace Ttfs2Mix
                     if (Status > 0)
                     {
                         PrintHTTPErrorInfo(Status);
+                        ProgressStatisticClass.IsDone = true;
+                    }
+                    else
+                    {
+                        ConsoleOutputList.Add($"Error: {httpex.Message}");
+                        ProgressStatisticClass.IsDone = true;
                     }
 
                     return;
