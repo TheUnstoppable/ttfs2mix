@@ -53,7 +53,7 @@ namespace Ttfs2Mix
             bool fileOk = false;
             string tempFile = "";
 
-            using (SHA1CryptoServiceProvider sha1 = new SHA1CryptoServiceProvider())
+            using (SHA1 sha1 = SHA1.Create())
             {
                 string fileHash = BitConverter.ToString(sha1.ComputeHash(ba)).Replace("-", string.Empty); ;
 

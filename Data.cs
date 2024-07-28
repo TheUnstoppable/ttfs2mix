@@ -140,7 +140,7 @@ namespace Ttfs2Mix
                 }
                 else
                 {
-                    throw ex;
+                    throw;
                 }
             }
         }

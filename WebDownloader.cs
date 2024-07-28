@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -13,22 +14,21 @@ namespace Ttfs2Mix
     {
         public static async Task<byte[]> GetBytesAsync(string Url, long ExpectedSize = -1)
         {
-            HttpWebRequest request = WebRequest.CreateHttp(Url);
-            request.Method = "GET";
-            request.UserAgent = $"ttfs2mix-{Program.Version}";
-            request.Referer = ProgressStatisticClass.CurrentPackage;
+            HttpClient client = new HttpClient();
+            client.DefaultRequestHeaders.Add("User-Agent", $"ttfs2mix-{Program.Version}");
+            client.DefaultRequestHeaders.Add("Referrer", ProgressStatisticClass.CurrentPackage);
 
-            HttpWebResponse response = (HttpWebResponse)await request.GetResponseAsync();
+            HttpResponseMessage response = await client.GetAsync(Url);
 
             if (response.StatusCode != HttpStatusCode.OK)
             {
-                throw new WebException($"Server returned HTTP {(int)response.StatusCode}.", null, WebExceptionStatus.ProtocolError, response);
+                throw new HttpRequestException($"Server returned HTTP {(int)response.StatusCode}.", null, response.StatusCode);
             }
             else
             {
                 byte[] Data;
 
-                using (Stream str = response.GetResponseStream())
+                using (Stream str = await response.Content.ReadAsStreamAsync())
                 {
                     if (ExpectedSize == -1)
                     {

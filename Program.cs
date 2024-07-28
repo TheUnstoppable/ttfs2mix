@@ -15,6 +15,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Net.Http;
 using System.Reflection;
 using System.Security.AccessControl;
 using System.Text;
@@ -264,19 +265,9 @@ namespace Ttfs2Mix
             }
         }
 
-        private static int ExceptionToHTTPCode(WebException ex)
+        private static int ExceptionToHTTPCode(HttpRequestException ex)
         {
-            try
-            {
-                string Number = ex.Message;
-                Number = Number.Remove(0, Number.Length - 4);
-                Number = Number.Substring(Number.Length - 1, 1);
-                return int.Parse(Number);
-            }
-            catch
-            {
-                return -1;
-            }
+            return ex.StatusCode.HasValue ? (int)ex.StatusCode.Value : -1;
         }
 
         private static void PrintHTTPErrorInfo(int Status)
@@ -474,9 +465,9 @@ namespace Ttfs2Mix
                     byte[] Data = await WebDownloader.GetBytesAsync($"{Location}/packages.dat");
                     TTFSData = TTFSClass.FromBytes(Data);
                 }
-                catch (WebException webex)
+                catch (HttpRequestException httpex)
                 {
-                    int Status = ExceptionToHTTPCode(webex);
+                    int Status = ExceptionToHTTPCode(httpex);
 
                     if (Status > 0)
                     {
@@ -545,7 +536,7 @@ namespace Ttfs2Mix
 
                 try
                 {
-                    Data = await WebDownloader.GetBytesAsync($"{Location}/files/{Uri.EscapeUriString($"{File.CRC}.{File.FileName}")}");
+                    Data = await WebDownloader.GetBytesAsync($"{Location}/files/{Uri.EscapeDataString($"{File.CRC}.{File.FileName}")}");
 
                     MIXPackage.Files.Add(new MixFileClass
                     {
@@ -557,10 +548,9 @@ namespace Ttfs2Mix
                 }
                 catch(Exception ex)
                 {
-                    if(ex is WebException)
+                    if(ex is HttpRequestException httpex)
                     {
-                        int Status = ExceptionToHTTPCode((WebException)ex);
-                        ConsoleOutputList.Add($"Skipping file {File.FileName} in package {TPI.PackageName}: Server returns {Status}.");
+                        ConsoleOutputList.Add($"Skipping file {File.FileName} in package {TPI.PackageName}: Server returns {ExceptionToHTTPCode(httpex)}.");
                     }
                     else
                     {
@@ -599,9 +589,9 @@ namespace Ttfs2Mix
                     byte[] Data = await WebDownloader.GetBytesAsync($"{Location}/packages.dat");
                     TTFSData = TTFSClass.FromBytes(Data);
                 }
-                catch (WebException webex)
+                catch (HttpRequestException httpex)
                 {
-                    int Status = ExceptionToHTTPCode(webex);
+                    int Status = ExceptionToHTTPCode(httpex);
 
                     if (Status > 0)
                     {
@@ -655,9 +645,9 @@ namespace Ttfs2Mix
                     byte[] Data = await WebDownloader.GetBytesAsync($"{Location}/packages.dat");
                     TTFSData = TTFSClass.FromBytes(Data);
                 }
-                catch (WebException webex)
+                catch (HttpRequestException httpex)
                 {
-                    int Status = ExceptionToHTTPCode(webex);
+                    int Status = ExceptionToHTTPCode(httpex);
 
                     if (Status > 0)
                     {
