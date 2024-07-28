@@ -27,7 +27,7 @@ namespace Ttfs2Mix
     internal static class Data
     {
         public static CultureInfo DefaultCulture => CultureInfo.InvariantCulture; // To fix upper-lower wrong character issues.
-        public static string ExeLocation => Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+        public static string ExeLocation => Path.GetDirectoryName(AppContext.BaseDirectory);
 
         public static PathsStruct ReadPaths()
         {
