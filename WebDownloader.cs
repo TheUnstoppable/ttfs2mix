@@ -1,6 +1,4 @@
-﻿using System.Diagnostics;
-
-namespace Ttfs2Mix;
+﻿namespace Ttfs2Mix;
 
 public class WebDownloaderProgress
 {

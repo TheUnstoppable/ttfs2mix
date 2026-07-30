@@ -8,9 +8,6 @@
     (at your option) any later version.
 */
 
-using Spectre.Console.Cli.Help;
-using Spectre.Console.Rendering;
-
 namespace Ttfs2Mix;
 
 [Description("Converts first occurence of TTFS package to MIX file and saves into data folder.")]
