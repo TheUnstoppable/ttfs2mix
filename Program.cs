@@ -165,8 +165,8 @@ public class Ttfs2MixHelpProvider : HelpProvider
             .ToList();
         
         list.AddRange(new FigletText(Ttfs2Mix.Name),
-            new Markup($"{Ttfs2Mix.Name} is an application to convert TTFS packages into MIX files made by {Ttfs2Mix.Authors}. Supports both client and FDS." + Environment.NewLine),
-            new Markup($"{Ttfs2Mix.Name} has to be located inside client or FDS folder in order to work. Converted maps will be saved in the Data folder." + Environment.NewLine),
+            new Markup($"{Ttfs2Mix.Name} is an application to convert TTFS packages into MIX files. Supports conversions on both client and FDS." + Environment.NewLine),
+            new Markup($"{Ttfs2Mix.Name} has to be placed inside the client or FDS folder, alongside 'game.exe' or 'server.exe'. Converted maps will be saved to the Data folder." + Environment.NewLine),
             new Markup(Environment.NewLine),
             new Markup($"[blue]{Ttfs2Mix.Name}[/] uses the following open-source libraries and code snippets:" + Environment.NewLine),
             new Rows(
