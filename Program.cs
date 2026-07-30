@@ -8,701 +8,713 @@
     (at your option) any later version.
 */
 
+using Spectre.Console.Cli.Help;
+using Spectre.Console.Rendering;
 
-using MixLibrary;
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Net.Http;
-using System.Threading;
-using System.Threading.Tasks;
-using TTPackageClass;
+namespace Ttfs2Mix;
 
-namespace Ttfs2Mix
+[Description("Converts first occurence of TTFS package to MIX file and saves into data folder.")]
+public class ConvertCommand : Command<ConvertCommand.Settings>
 {
-    static class ProgressStatisticClass
+    public class Settings : CommandSettings
     {
-        public static int MIXIndex; //Count to handle
-        public static int MIXTotal; //Total to handle
+        [CommandArgument(0, "<package id/name>")]
+        [Description("ID or name of the package.")]
+        public string Package { get; set; }
+    }
+    
+    protected override int Execute(CommandContext context, Settings settings, CancellationToken cancellationToken)
+    {
+        Ttfs2Mix.Convert(settings.Package)
+            .GetAwaiter()
+            .GetResult();
 
-        public static ulong FileCountIndex; //Count to handle
-        public static ulong TotalFileCount; //Total to handle
+        return 0;
+    }
+}
 
-        public static string StatusText = string.Empty;
+[Description("Converts first occurence of TTFS package to MIX file and saves into data folder.")]
+public class ConvertAllCommand : Command<ConvertAllCommand.Settings>
+{
+    public class Settings : CommandSettings
+    {
+        
+    }
+    
+    protected override int Execute(CommandContext context, Settings settings, CancellationToken cancellationToken)
+    {
+        Ttfs2Mix.ConvertAll()
+            .GetAwaiter()
+            .GetResult();
 
-        public static string CurrentPackage = string.Empty;
-        public static bool IsDone;
-        public static int Mode = -1;
+        return 0;
+    }
+}
+
+[Description("Converts all matched TTFS packages to MIX files and saves into data folder.")]
+public class MultiConvertCommand : Command<MultiConvertCommand.Settings>
+{
+    public class Settings : CommandSettings
+    {
+        [CommandArgument(0, "<package id/name>")]
+        [Description("Partial or full ID or name of the package.")]
+        public string PackageMatch { get; set; }
+    }
+    
+    protected override int Execute(CommandContext context, Settings settings, CancellationToken cancellationToken)
+    {
+        Ttfs2Mix.MultiConvert(settings.PackageMatch)
+            .GetAwaiter()
+            .GetResult();
+
+        return 0;
+    }
+}
+
+[Description("Finds and downloads first occurence of TTFS package from a remote repository to MIX file and saves into data folder.")]
+public class DownloadCommand : Command<DownloadCommand.Settings>
+{
+    public class Settings : CommandSettings
+    {
+        [CommandArgument(0, "<package id/name>")]
+        [Description("ID or name of the package.")]
+        public string Package { get; set; }
+        
+        [CommandArgument(1, "<url>")]
+        [Description("Location of the TTFS repository.")]
+        public string Location { get; set; }
+        
+        [CommandOption("-n|--count")]
+        [Description("Number of maximum allowed concurrent file downloads for a package.")]
+        [DefaultValue(1)]
+        public int Count { get; set; }
+    }
+    
+    protected override int Execute(CommandContext context, Settings settings, CancellationToken cancellationToken)
+    {
+        Ttfs2Mix.Download(settings.Package, settings.Location, settings.Count)
+            .GetAwaiter()
+            .GetResult();
+
+        return 0;
+    }
+}
+
+[Description("Finds and downloads all TTFS packages from a remote repository to MIX files and saves all into data folder.")]
+public class DownloadAllCommand : Command<DownloadAllCommand.Settings>
+{
+    public class Settings : CommandSettings
+    {
+        [CommandArgument(0, "<url>")]
+        [Description("Location of the TTFS repository.")]
+        public string Location { get; set; }
+        
+        [CommandOption("-n|--count")]
+        [Description("Number of maximum allowed concurrent file downloads for a package.")]
+        [DefaultValue(1)]
+        public int Count { get; set; }
+    }
+    
+    protected override int Execute(CommandContext context, Settings settings, CancellationToken cancellationToken)
+    {
+        AnsiConsole.WriteLine("Count is:  " + settings.Count);
+        Ttfs2Mix.DownloadAll(settings.Location, settings.Count)
+            .GetAwaiter()
+            .GetResult();
+
+        return 0;
+    }
+}
+
+[Description("Finds and downloads all matched TTFS packages from a remote repository to MIX files and saves into data folder.")]
+public class MultiDownloadCommand : Command<MultiDownloadCommand.Settings>
+{
+    public class Settings : CommandSettings
+    {
+        [CommandArgument(0, "<package id/name>")]
+        [Description("ID or name of the package.")]
+        public string Package { get; set; }
+        
+        [CommandArgument(1, "<url>")]
+        [Description("Location of the TTFS repository.")]
+        public string Location { get; set; }
+        
+        [CommandOption("-n|--count")]
+        [Description("Number of maximum allowed concurrent file downloads for a package.")]
+        [DefaultValue(1)]
+        public int Count { get; set; }
+    }
+    
+    protected override int Execute(CommandContext context, Settings settings, CancellationToken cancellationToken)
+    {
+        Ttfs2Mix.MultiDownload(settings.Package, settings.Location, settings.Count)
+            .GetAwaiter()
+            .GetResult();
+
+        return 0;
+    }
+}
+
+public class Ttfs2MixHelpProvider : HelpProvider
+{
+    public Ttfs2MixHelpProvider(ICommandAppSettings settings) : base(settings)
+    {
+        
     }
 
-    public static class Program
+    public override IEnumerable<IRenderable> GetHeader(ICommandModel model, ICommandInfo command)
     {
-        //Values for fancy stuff
-
-        static int LoadState; // the spinning line
-        static int PBarMax = 20;
-        static int PBarVal;
-
-        //Application
-
-        private static Thread Worker;
-        internal static List<string> ConsoleOutputList = new();
-
-        //Version
-        public static readonly string Version = "1.2";
-
-        public static void Main(string[] args)
-        {
-            Console.WriteLine($"Ttfs2Mix utility {Version} - by Unstoppable");
-
-            EmbeddedAssembly.Load("Ttfs2Mix.MixLibrary.dll", "MixLibrary.dll");
-            EmbeddedAssembly.Load("Ttfs2Mix.TTPackageClass.dll", "TTPackageClass.dll");
-
-            //Load dependencies from embedded resource, to make it a single executable file.
-            AppDomain.CurrentDomain.AssemblyResolve += (_, e) => EmbeddedAssembly.Get(e.Name);
-
-            if (args.Length >= 1)
-            {
-                switch(args[0].ToLower(Data.DefaultCulture))
-                {
-                    case "help":
-                        Console.WriteLine("\"convert <Package ID/Package Name>\": Converts first occurence of TTFS package to MIX file and saves into data folder.");
-                        Console.WriteLine("\"multiconvert <Package ID/Package Name>\": Converts all matched TTFS packages to MIX files and saves into data folder.");
-                        Console.WriteLine("\"convertall\": Converts all TTFS packages to MIX and saves all into data folder.");
-                        Console.WriteLine("\"download <Package ID/Package Name> <URL>\": Finds and downloads first occurence of TTFS package from a remote repository to MIX file and saves into data folder.");
-                        Console.WriteLine("\"multidownload <Package ID/Package Name> <URL>\": Finds and downloads all matched TTFS packages from a remote repository to MIX files and saves into data folder.");
-                        Console.WriteLine("\"downloadall <URL>\": Finds and downloads all TTFS packages from a remote repository to MIX files and saves all into data folder.");
-                        Console.WriteLine("\"help\": Prints the list of available commands.");
-                        Console.WriteLine("\"info\": Shows information about utility and used libraries.");
-                        return;
-
-                    case "info":
-                        Console.WriteLine("Ttfs2Mix is an application to convert TTFS packages into MIX files made by Unstoppable. Supports both client and FDS.");
-                        Console.WriteLine("Ttfs2Mix has to be located inside client or FDS folder in order to work. Converted maps will be saved in Data folder.");
-                        Console.WriteLine();
-                        Console.WriteLine("Ttfs2Mix contains code snippets and libraries from following sources:");
-                        Console.WriteLine("MixLibrary 1.2 - https://github.com/TheUnstoppable/MixLibrary");
-                        Console.WriteLine("TTPackageClass 1.3 - https://github.com/TheUnstoppable/TTPackageClass");
-                        Console.WriteLine("EmbeddedAssembly.cs - https://www.codeproject.com/Articles/528178/Load-DLL-From-Embedded-Resource");
-                        Console.WriteLine("ParseSize - https://stackoverflow.com/a/14488941/5791443");
-                        Console.WriteLine("ReadToEnd extension for Stream - https://stackoverflow.com/a/1080445/5791443");
-                        return;
-
-                    case "convert":
-                        ProgressStatisticClass.MIXTotal = 1;
-                        ProgressStatisticClass.Mode = 0;
-                        Worker = new Thread(() => Convert(string.Join(" ", args.Skip(1))))
-                        {
-                            IsBackground = true
-                        };
-                        Worker.Start();
-                        break;
-
-                    case "convertall":
-                        ProgressStatisticClass.Mode = 1;
-                        Worker = new Thread(() => ConvertAll())
-                        {
-                            IsBackground = true
-                        };
-                        Worker.Start();
-                        break;
-
-                    case "multiconvert":
-                        ProgressStatisticClass.Mode = 2;
-                        Worker = new Thread(() => MultiConvert(string.Join(" ", args.Skip(1))))
-                        {
-                            IsBackground = true
-                        };
-                        Worker.Start();
-                        break;
-
-                    case "download":
-                        ProgressStatisticClass.MIXTotal = 1;
-                        ProgressStatisticClass.Mode = 3;
-                        Worker = new Thread(async () => await Download(string.Join(" ", args.Skip(1).Take(args.Length - 2)), args.Last()))
-                        {
-                            IsBackground = true
-                        };
-                        Worker.Start();
-                        break;
-
-                    case "multidownload":
-                        ProgressStatisticClass.Mode = 4;
-                        Worker = new Thread(async () => await MultiDownload(string.Join(" ", args.Skip(1).Take(args.Length - 2)), args.Last()))
-                        {
-                            IsBackground = true
-                        };
-                        Worker.Start();
-                        break;
-
-                    case "downloadall":
-                        ProgressStatisticClass.Mode = 5;
-                        Worker = new Thread(async () => await DownloadAll(string.Join(" ", args.Skip(1))))
-                        {
-                            IsBackground = true
-                        };
-                        Worker.Start();
-                        break;
-
-                    default:
-                        Console.WriteLine("You have specified an invalid command. Please run this application with \"help\" parameter for commands.");
-                        return;
-                }
-
-                Console.CursorVisible = false;
-                while(!ProgressStatisticClass.IsDone)
-                {
-                    LoadState++;
-
-                    ulong val = ProgressStatisticClass.FileCountIndex;
-                    ulong max = ProgressStatisticClass.TotalFileCount;
-
-                    if (max > 0)
-                        PBarVal = (int)Math.Floor(((double)val / (double)max) * PBarMax);
-                    else
-                        PBarVal = 0;
-
-                    switch(LoadState)
-                    {
-                        case 0:
-                            Console.Write("/ ");
-                            break;
-                        case 1:
-                            Console.Write("| ");
-                            break;
-                        case 2:
-                            Console.Write("\\ ");
-                            break;
-                        case 3:
-                            Console.Write("- ");
-                            LoadState = -1;
-                            break;
-                    }
-
-                    Console.Write($"{ProgressStatisticClass.CurrentPackage} ({(!string.IsNullOrEmpty(ProgressStatisticClass.StatusText) ? ProgressStatisticClass.StatusText : $"{val}/{max}")}) [{new string('#', PBarVal)}{GenerateSpace(PBarMax - PBarVal)}]");
-                    Thread.Sleep(100);
-
-                    ResetCurrentLine();
-                    while (ConsoleOutputList.Count > 0)
-                    {
-                        Console.WriteLine(ConsoleOutputList[0]);
-                        ConsoleOutputList.RemoveAt(0);
-                    }
-                }
-                Console.CursorVisible = true;
-
-                Console.WriteLine($"Conversion done{(ProgressStatisticClass.MIXTotal - ProgressStatisticClass.MIXIndex > 0 ? $" with {ProgressStatisticClass.MIXTotal - ProgressStatisticClass.MIXIndex} failed packages." : ".")}");
-            }
-            else
-            {
-                Console.WriteLine("Please run this application with \"help\" parameter for commands.");
-                return;
-            }
-        }
-
-        #region Helpers
-        static string GenerateSpace(int val)
-        {
-            return new string(' ', val < 0 ? 0 : val);
-        }
+        var list = base.GetHeader(model, command)
+            .ToList();
         
-        static void ResetCurrentLine()
+        list.AddRange(new FigletText(Ttfs2Mix.Name),
+            new Markup($"{Ttfs2Mix.Name} is an application to convert TTFS packages into MIX files made by {Ttfs2Mix.Authors}. Supports both client and FDS." + Environment.NewLine),
+            new Markup($"{Ttfs2Mix.Name} has to be located inside client or FDS folder in order to work. Converted maps will be saved in the Data folder." + Environment.NewLine),
+            new Markup(Environment.NewLine),
+            new Markup($"[blue]{Ttfs2Mix.Name}[/] uses the following open-source libraries and code snippets:" + Environment.NewLine),
+            new Rows(
+                new Markup("[bold]MixLibrary[/] [dim]by[/] The Unstoppable"),
+                new Markup("[bold]Spectre.Console.Cli[/] [dim]by[/] Patrik Svensson, Phil Scott, Nils Andresen, Cédric Luthi"),
+                new Markup("[bold]TTPackageClass[/] [dim]by[/] The Unstoppable"),
+                new Markup("https://www.codeproject.com/Articles/528178/Load-DLL-From-Embedded-Resource"),
+                new Markup("https://stackoverflow.com/a/14488941/5791443"),
+                new Markup("https://stackoverflow.com/a/1080445/5791443")
+            ),
+            new Rule()
+        );
+
+        return list;
+    }
+}
+
+public class Ttfs2Mix
+{
+    public const string Name = nameof(Ttfs2Mix);
+    public const string Version = "1.2";
+    public const string Authors = "Unstoppable";
+
+    public static void PrintSplash()
+    {
+        Console.WriteLine($"{Name} utility {Version} - by {Authors}");
+    }
+    
+    public static int Main(string[] args)
+    {
+        PrintSplash();
+        
+        EmbeddedAssembly.Load("Ttfs2Mix.MixLibrary.dll", "MixLibrary.dll");
+        EmbeddedAssembly.Load("Ttfs2Mix.TTPackageClass.dll", "TTPackageClass.dll");
+
+        //Load dependencies from embedded resource, to make it a single executable file.
+        AppDomain.CurrentDomain.AssemblyResolve += (_, e) => EmbeddedAssembly.Get(e.Name);
+
+        var app = new CommandApp();
+        
+        app.Configure(x =>
         {
-            int currentLineCursor = Console.CursorTop;
-            Console.SetCursorPosition(0, Console.CursorTop);
-            Console.Write(new string(' ', Console.WindowWidth));
-            Console.SetCursorPosition(0, currentLineCursor);
-        }
+            x.SetApplicationName(Name);
+            x.SetApplicationVersion(Version);
+            x.SetHelpProvider(new Ttfs2MixHelpProvider(x.Settings));
+            
+            x.AddCommand<ConvertCommand>("convert");
+            x.AddCommand<ConvertAllCommand>("convertall");
+            x.AddCommand<MultiConvertCommand>("multiconvert");
+            x.AddCommand<DownloadCommand>("download");
+            x.AddCommand<DownloadAllCommand>("downloadall");
+            x.AddCommand<MultiDownloadCommand>("multidownload");
+        });
+        
+        return app.Run(args);
+    }
+    
+    #region Helpers
+    static PathsStruct? Paths;
+    static string TTFSFolder;
 
-        //TTFS => MIX specific code.
+    private static bool PackageIDCheck(TPIPackageClass Package, string ID)
+    {
+        return Package.PackageID
+            .ToLower(Data.DefaultCulture)
+            .Equals(ID.ToLower(Data.DefaultCulture));
+    }
 
-        static PathsStruct? Paths;
-        static string TTFSFolder;
+    private static bool PackageNameCheck(TPIPackageClass Package, string Name)
+    {
+        return Package.PackageName
+            .Equals(Name);
+    }
 
-        private static bool PackageIDCheck(TPIPackageClass Package, string ID)
+    private static bool CheckFields(out TTFSDataClass? TTFSData)
+    {
+        TTFSData = null;
+
+        Paths ??= Data.ReadPaths();
+        TTFSFolder ??= Data.GetTTFSDirectory(Paths.Value);
+
+        if (!TTFSData.HasValue)
         {
-            return Package.PackageID
-                          .ToLower(Data.DefaultCulture)
-                          .Equals(ID.ToLower(Data.DefaultCulture));
-        }
-
-        private static bool PackageNameCheck(TPIPackageClass Package, string Name)
-        {
-            return Package.PackageName
-                          .Equals(Name);
-        }
-
-        private static void CheckFields(ref TTFSDataClass? TTFSData)
-        {
-            TTFSData = default;
-
-            Paths ??= Data.ReadPaths();
-            TTFSFolder ??= Data.GetTTFSDirectory(Paths.Value);
-
-            if (!TTFSData.HasValue)
-            {
-                if (TTFSFolder != null)
-                {
-                    try
-                    {
-                        TTFSData = TTFSClass.FromFile(Path.Combine(TTFSFolder, "packages.dat"));
-                    }
-                    catch (Exception ex)
-                    {
-                        ConsoleOutputList.Add($"Error: {ex.Message}");
-                        ProgressStatisticClass.IsDone = true;
-                        return;
-                    }
-                }
-                else
-                {
-                    ConsoleOutputList.Add($"Could not auto-detect TTFS folder. Please make sure you are running this utility from root directory game/server folder.");
-                    ProgressStatisticClass.IsDone = true;
-                }
-            }
-            else
-            {
-                TTFSData = TTFSData.Value;
-            }
-        }
-
-        private static int ExceptionToHTTPCode(HttpRequestException ex)
-        {
-            return ex.StatusCode.HasValue ? (int)ex.StatusCode.Value : -1;
-        }
-
-        private static void PrintHTTPErrorInfo(int Status)
-        {
-            switch (Status)
-            {
-                case 401: //Forbidden
-                    ConsoleOutputList.Add($"Authorization required to view this location. Please make sure server allows ttfs2mix or you have permission to access.");
-                    break;
-                case 404: //Not found
-                    ConsoleOutputList.Add($"Unable to find a TTFS repository at the specified location. Please make sure entered URL is correct.");
-                    break;
-                case 403: //Forbidden
-                    ConsoleOutputList.Add($"Server forbid access to this location. Please make sure server allows ttfs2mix or you have permission to access.");
-                    break;
-                case 500: //Server error
-                    ConsoleOutputList.Add($"An internal server error occured while requesting TTFS packages. Please try again later.");
-                    break;
-                default:
-                    ConsoleOutputList.Add($"Server sent an unrecognized status code of {Status}. Please make sure server allows ttfs2mix, or try again later.");
-                    break;
-            }
-        }
-        #endregion
-
-        #region Commands
-        internal static void Convert(string Package, TTFSDataClass? TTFSData = null)
-        {
-            CheckFields(ref TTFSData);
-
-            ProgressStatisticClass.StatusText = "Locating...";
-
-            TTFSDataClass TTFS;
-
-            if (TTFSData.HasValue)
-            {
-                TTFS = TTFSData.Value;
-            }
-            else
-            {
-                if (ProgressStatisticClass.Mode == 0)
-                    ProgressStatisticClass.IsDone = true;
-
-                return;
-            }
-
-            TPIPackageClass TPI = default;
-            var IDMatch = TTFS.Packages.FindAll(x => PackageIDCheck(x, Package));
-            var NameMatch = TTFS.Packages.FindAll(x => PackageNameCheck(x, Package));
-
-            if (IDMatch.Count == 1) //ID Match
-            {
-                TPI = IDMatch.First();
-            }
-            else if (NameMatch.Count == 1) //Name Match
-            {
-                TPI = NameMatch.First();
-            }
-            else if (IDMatch.Count > 1) //Too many ID match
-            {
-                ConsoleOutputList.Add($"Too many matches found with specified identifier \"{Package}\".");
-                if (ProgressStatisticClass.Mode == 0)
-                    ProgressStatisticClass.IsDone = true;
-                return;
-            }
-            else if (NameMatch.Count > 1) //Too many Name match
-            {
-                ConsoleOutputList.Add($"Too many matches found with specified identifier \"{Package}\".");
-                if (ProgressStatisticClass.Mode == 0)
-                    ProgressStatisticClass.IsDone = true;
-                return;
-            }
-            else
-            {
-                ConsoleOutputList.Add($"Couldn't find any package with specified identifier \"{Package}\".");
-                if (ProgressStatisticClass.Mode == 0)
-                    ProgressStatisticClass.IsDone = true;
-                return;
-            }
-
-            ProgressStatisticClass.CurrentPackage = $"{TPI.PackageName} ({TPI.PackageID})";
-            ProgressStatisticClass.TotalFileCount = (ulong)TPI.FileCount;
-            ProgressStatisticClass.FileCountIndex = 0;
-
-            ProgressStatisticClass.StatusText = string.Empty;
-
-            MixPackageClass MIXPackage = MixPackageClass.CreateMIX();
-            foreach(TTFileClass TTFile in TPI.Files)
+            if (TTFSFolder != null)
             {
                 try
                 {
+                    TTFSData = TTFSClass.FromFile(Path.Combine(TTFSFolder, "packages.dat"));
+                }
+                catch (Exception ex)
+                {
+                    AnsiConsole.Exception(ex);
+                    return false;
+                }
+            }
+            else
+            {
+                AnsiConsole.ErrorLine($"Could not auto-detect TTFS folder. Please make sure you are running this utility from root directory game/server folder.");
+                return false;
+            }
+        }
+        else
+        {
+            TTFSData = TTFSData.Value;
+        }
+
+        return true;
+    }
+    
+    private static void FindPackageFunc(string Package, TTFSDataClass TTFS, out TPIPackageClass? TPI)
+    {
+        TPI = null;
+        var IDMatch = TTFS.Packages.FindAll(x => PackageIDCheck(x, Package));
+        var NameMatch = TTFS.Packages.FindAll(x => PackageNameCheck(x, Package));
+
+        if (IDMatch.Count == 1) //ID Match
+        {
+            TPI = IDMatch.First();
+        }
+        else if (NameMatch.Count == 1) //Name Match
+        {
+            TPI = NameMatch.First();
+        }
+        else if (IDMatch.Count > 1) //Too many ID match
+        {
+            AnsiConsole.ErrorLine($"Too many matches found with specified identifier \"{Package}\".");
+        }
+        else if (NameMatch.Count > 1) //Too many Name match
+        {
+            AnsiConsole.ErrorLine($"Too many matches found with specified identifier \"{Package}\".");
+        }
+        else
+        {
+            AnsiConsole.ErrorLine($"Couldn't find any package with specified identifier \"{Package}\".");
+        }
+    }
+    
+    private static void SaveFunc(MixPackageClass MIXPackage, TPIPackageClass TPI, ProgressContext ctx)
+    {
+        var task = ctx.AddTask($"Saving {TPI.PackageName}...");
+        task.IsIndeterminate = true;
+
+        MIXPackage.Save(out var ms);
+
+        ms.Position = 0;
+        task.MaxValue = ms.Length;
+        task.IsIndeterminate = false;
+                
+        var loc = Path.Combine(Data.WorkingDirectory, "data", $"{TPI.PackageName}.mix");
+        using var fs = new FileStream(loc, FileMode.Create, FileAccess.Write);
+                
+        fs.SetLength(ms.Length);
+                
+        int bytesRead;
+        byte[] buffer = new byte[81920];
+        while ((bytesRead = ms.Read(buffer, 0, buffer.Length)) > 0)
+        {
+            fs.Write(buffer, 0, bytesRead);
+            task.Increment(bytesRead);
+        }
+                
+        ms.Dispose();
+        ctx.RemoveTask(task);
+    }
+
+    private static int ExceptionToHTTPCode(HttpRequestException ex)
+    {
+        return ex.StatusCode.HasValue ? (int)ex.StatusCode.Value : -1;
+    }
+
+    private static void PrintHTTPErrorInfo(int Status)
+    {
+        switch (Status)
+        {
+            case 401: //Forbidden
+                AnsiConsole.ErrorLine($"Authorization required to view this location. Please make sure server allows ttfs2mix or you have permission to access.");
+                break;
+            case 404: //Not found
+                AnsiConsole.ErrorLine($"Unable to find a TTFS repository at the specified location. Please make sure entered URL is correct.");
+                break;
+            case 403: //Forbidden
+                AnsiConsole.ErrorLine($"Server forbid access to this location. Please make sure server allows ttfs2mix or you have permission to access.");
+                break;
+            case 500: //Server error
+                AnsiConsole.ErrorLine($"An internal server error occured while requesting TTFS packages. Please try again later.");
+                break;
+            default:
+                AnsiConsole.ErrorLine($"Server sent an unrecognized status code of {Status}. Please make sure server allows ttfs2mix, or try again later.");
+                break;
+        }
+    }
+    #endregion
+
+    #region Commands
+
+    internal static async Task InternalConvertPackageAsync(TPIPackageClass TPI, ProgressContext? Context = null)
+    {
+        MixPackageClass MIXPackage = MixPackageClass.CreateMIX();
+        
+        void ConversionFunc(ProgressContext ctx)
+        {
+            var task = ctx.AddTask(string.IsNullOrWhiteSpace(TPI.PackageName) ? TPI.PackageID : TPI.PackageName, maxValue: TPI.FileCount);
+                
+            foreach(TTFileClass TTFile in TPI.Files)
+            {
+                var fileTask = ctx.AddTask(TTFile.FileName);
+                fileTask.IsIndeterminate = true;
+                    
+                try
+                {
+                    using var ms = new MemoryStream();
+                    using var fs = File.OpenRead(Path.Combine(TTFSFolder, "files", TTFile.FullName.Replace("\\", "_")));
+
+                    fileTask.MaxValue = fs.Length;
+                    fileTask.IsIndeterminate = false;
+                        
+                    int bytesRead;
+                    byte[] buffer = new byte[81920];
+                    while ((bytesRead = fs.Read(buffer, 0, buffer.Length)) > 0)
+                    {
+                        ms.Write(buffer, 0, bytesRead);
+                        fileTask.Increment(bytesRead);
+                    }
+                        
                     MIXPackage.Files.Add(new MixFileClass
                     {
                         FileName = TTFile.FileName,
-                        Data = File.ReadAllBytes(Path.Combine(TTFSFolder, "files", TTFile.FullName.Replace("\\", "_")))
+                        Data = ms.ToArray()
                     });
                 }
                 catch(Exception ex)
                 {
-                    ConsoleOutputList.Add($"Skipping file {TTFile.FileName} in package {TPI.PackageName}: {ex.Message}.");
+                    AnsiConsole.ErrorLine($"Failed to process file '{TTFile.FileName}' in '{TPI.PackageName}' ({TPI.PackageID}).");
+                    AnsiConsole.Exception(ex);
                 }
 
-                ProgressStatisticClass.FileCountIndex++;
+                ctx.RemoveTask(fileTask);
+                task.Increment(1);
             }
 
-            ProgressStatisticClass.StatusText = "Saving...";
-
-            var SaveLoc = Path.Combine(Data.ExeLocation, "Data", $"{TPI.PackageName}.mix");
-            MIXPackage.Save(SaveLoc);
-            ConsoleOutputList.Add($"+ {TPI.PackageName} ({TPI.PackageID})");
-
-            ProgressStatisticClass.MIXIndex++;
-
-            if (ProgressStatisticClass.Mode == 0)
-                ProgressStatisticClass.IsDone = true;
+            ctx.RemoveTask(task);
+        }
+        
+        if (Context != null)
+        {
+            ConversionFunc(Context);
+            SaveFunc(MIXPackage, TPI, Context);
+        }
+        else
+        {
+            AnsiConsole.Progress()
+                .AutoClear(true)
+                .Columns(new SpinnerColumn(), new TaskDescriptionColumn(), new ProgressBarColumn(), new PercentageColumn(), new RemainingTimeColumn())
+                .Start(ConversionFunc);
+            
+            AnsiConsole.Progress()
+                .AutoClear(true)
+                .Columns(new SpinnerColumn(), new TaskDescriptionColumn(), new ProgressBarColumn(), new PercentageColumn(), new RemainingTimeColumn())
+                .Start(ctx => SaveFunc(MIXPackage, TPI, ctx));
         }
 
-        internal static void ConvertAll(TTFSDataClass? TTFSData = null)
+        AnsiConsole.MarkupLine($"[green][bold]+[/][/] {TPI.PackageName} [dim]({TPI.PackageID})[/]");
+    }
+    
+    internal static async Task InternalDownloadPackageAsync(string Location, TPIPackageClass TPI, int Count, ProgressContext? Context = null)
+    {
+        MixPackageClass MIXPackage = MixPackageClass.CreateMIX();
+        
+        async Task DownloadFilesFunc(ProgressContext ctx)
         {
-            CheckFields(ref TTFSData);
-
-            TTFSDataClass TTFS;
-
-            if (TTFSData.HasValue)
+            Dictionary<Task, ProgressTask> DownloadTasks = new();
+            var task = ctx.AddTask(string.IsNullOrWhiteSpace(TPI.PackageName) ? TPI.PackageID : TPI.PackageName, maxValue: TPI.FileCount);
+            
+            async Task WaitDownload()
             {
-                TTFS = TTFSData.Value;
+                var finishedTask = await Task.WhenAny(DownloadTasks.Keys);
+                await finishedTask;
+                    
+                ctx.RemoveTask(DownloadTasks[finishedTask]);
+                DownloadTasks.Remove(finishedTask);
+                task.Increment(1);
             }
-            else
-            {
-                ProgressStatisticClass.IsDone = true;
-                return;
-            }
-
-            if (!ProgressStatisticClass.IsDone)
-            {
-                ProgressStatisticClass.MIXTotal = TTFS.PackageCount;
-
-                foreach (TPIPackageClass Package in TTFS.Packages)
-                {
-                    Convert(Package.PackageID, TTFS);
-                }
-            }
-
-            ProgressStatisticClass.IsDone = true;
-        }
-
-        internal static void MultiConvert(string Package, TTFSDataClass? TTFSData = null)
-        {
-            CheckFields(ref TTFSData);
-
-            TTFSDataClass TTFS;
-
-            if (TTFSData.HasValue)
-            {
-                TTFS = TTFSData.Value;
-            }
-            else
-            {
-                ProgressStatisticClass.IsDone = true;
-                return;
-            }
-
-            if (!ProgressStatisticClass.IsDone)
-            {
-                var Matches = TTFS.Packages.Where(x =>
-                        x.PackageName.ToLower(Data.DefaultCulture).Contains(Package.ToLower(Data.DefaultCulture)) ||
-                        x.PackageID.ToLower(Data.DefaultCulture).Contains(Package.ToLower(Data.DefaultCulture)))
-                    .ToArray();
-
-                ProgressStatisticClass.MIXTotal = Matches.Length;
-
-                if(!Matches.Any())
-                {
-                    ConsoleOutputList.Add($"Couldn't find any package with specified identifier \"{Package}\".");
-                    ProgressStatisticClass.IsDone = true;
-
-                    return;
-                }
-
-                foreach (TPIPackageClass TTPackage in Matches)
-                {
-                    Convert(TTPackage.PackageID, TTFS);
-                }
-            }
-
-            ProgressStatisticClass.IsDone = true;
-        }
-
-        internal static async Task Download(string Package, string Location, TTFSDataClass? TTFSData = null)
-        {
-            ProgressStatisticClass.StatusText = "Fetching packages...";
-
-            if (TTFSData == null)
-            {
-                try
-                {
-                    byte[] Data = await WebDownloader.GetBytesAsync($"{Location}/packages.dat");
-                    TTFSData = TTFSClass.FromBytes(Data);
-                }
-                catch (HttpRequestException httpex)
-                {
-                    int Status = ExceptionToHTTPCode(httpex);
-
-                    if (Status > 0)
-                    {
-                        PrintHTTPErrorInfo(Status);
-                        ProgressStatisticClass.IsDone = true;
-                    }
-                    else
-                    {
-                        ConsoleOutputList.Add($"Error: {httpex.Message}");
-                        ProgressStatisticClass.IsDone = true;
-                    }
-
-                    return;
-                }
-                catch (Exception ex)
-                {
-                    ConsoleOutputList.Add($"Error: {ex.Message}");
-                    ProgressStatisticClass.IsDone = true;
-                    return;
-                }
-            }
-
-            TTFSDataClass TTFS = TTFSData.Value;
-
-            TPIPackageClass TPI = default;
-            var IDMatch = TTFS.Packages.FindAll(x => PackageIDCheck(x, Package));
-            var NameMatch = TTFS.Packages.FindAll(x => PackageNameCheck(x, Package));
-
-            if (IDMatch.Count == 1) //ID Match
-            {
-                TPI = IDMatch.First();
-            }
-            else if (NameMatch.Count == 1) //Name Match
-            {
-                TPI = NameMatch.First();
-            }
-            else if (IDMatch.Count > 1) //Too many ID match
-            {
-                ConsoleOutputList.Add($"Too many matches found with specified identifier \"{Package}\".");
-                if (ProgressStatisticClass.Mode == 3)
-                    ProgressStatisticClass.IsDone = true;
-                return;
-            }
-            else if (NameMatch.Count > 1) //Too many Name match
-            {
-                ConsoleOutputList.Add($"Too many matches found with specified identifier \"{Package}\".");
-                if (ProgressStatisticClass.Mode == 3)
-                    ProgressStatisticClass.IsDone = true;
-                return;
-            }
-            else
-            {
-                ConsoleOutputList.Add($"Couldn't find any package with specified identifier \"{Package}\".");
-                if (ProgressStatisticClass.Mode == 3)
-                    ProgressStatisticClass.IsDone = true;
-                return;
-            }
-
-            ProgressStatisticClass.CurrentPackage = $"{TPI.PackageName} ({TPI.PackageID})";
-            ProgressStatisticClass.TotalFileCount = (ulong)TPI.Files.Sum(x => x.FileSize);
-            ProgressStatisticClass.FileCountIndex = 0;
-
-            ProgressStatisticClass.StatusText = $"Downloading...";
-
-            int fileindex = 0;
-            int totalfiles = TPI.FileCount;
-
-            MixPackageClass MIXPackage = MixPackageClass.CreateMIX();
+            
             foreach(TTFileClass File in TPI.Files)
             {
-                byte[] Data = new byte[File.FileSize];
-
-                try
+                if (DownloadTasks.Count >= Count)
                 {
-                    Data = await WebDownloader.GetBytesAsync($"{Location}/files/{Uri.EscapeDataString($"{File.CRC}.{File.FileName}")}");
+                    await WaitDownload();
+                }
+                
+                var fileTask = ctx.AddTask($"{File.FileName} ({WebDownloader.ParseSize(File.FileSize)} - 0.00 bytes/s)", maxValue: File.FileSize);
+                DownloadTasks.Add(DownloadFile(File, fileTask), fileTask);
+            }
 
+            while (DownloadTasks.Count > 0)
+            {
+                await WaitDownload();
+            }
+            
+            ctx.RemoveTask(task);
+        }
+
+        async Task DownloadFile(TTFileClass File, ProgressTask Task)
+        {
+            byte[] Data;
+            try
+            {
+                Data = await WebDownloader.GetBytesAsync($"{Location}/files/{Uri.EscapeDataString($"{File.CRC}.{File.FileName.Replace('\\', '_')}")}", TPI.PackageName, new Progress<WebDownloaderProgress>(x =>
+                {
+                    Task.Description = $"{File.FileName} ({WebDownloader.ParseSize(File.FileSize)} - {WebDownloader.ParseSize(x.Speed)}/s)";
+                    Task.Value = x.DownloadedBytes;
+                    Task.MaxValue = x.TotalSize;
+                }));
+
+                lock (MIXPackage.Files)
+                {
                     MIXPackage.Files.Add(new MixFileClass
                     {
                         FileName = File.FileName,
                         Data = Data
                     });
-
-                    ProgressStatisticClass.FileCountIndex += (ulong)Data.Length;
                 }
-                catch(Exception ex)
-                {
-                    if(ex is HttpRequestException httpex)
-                    {
-                        int Status = ExceptionToHTTPCode(httpex);
-                        ConsoleOutputList.Add($"Skipping file {File.FileName} in package {TPI.PackageName}: {(Status > 0 ? $"Server returns {Status}" : httpex.Message)}.");
-                    }
-                    else
-                    {
-                        ConsoleOutputList.Add($"Skipping file {File.FileName} in package {TPI.PackageName}: {ex.Message}.");
-                    }
-
-                    ProgressStatisticClass.FileCountIndex += File.FileSize;
-                }
-
-                fileindex++;
-                ProgressStatisticClass.StatusText = $"Downloading... ({fileindex}/{totalfiles} | {WebDownloader.ParseSize((long)ProgressStatisticClass.FileCountIndex)}/{WebDownloader.ParseSize((long)ProgressStatisticClass.TotalFileCount)})";
             }
-
-            ProgressStatisticClass.StatusText = "Saving...";
-
-            var SaveLoc = Path.Combine(Data.ExeLocation, "Data", $"{TPI.PackageName}.mix");
-            MIXPackage.Save(SaveLoc);
-            ConsoleOutputList.Add($"+ {TPI.PackageName} ({TPI.PackageID})");
-
-            ProgressStatisticClass.MIXIndex++;
-
-            GC.Collect();
-
-            if (ProgressStatisticClass.Mode == 3)
-                ProgressStatisticClass.IsDone = true;
+            catch(Exception ex)
+            {
+                AnsiConsole.ErrorLine($"Skipping file '{File.FileName}' in package '{TPI.PackageName}'.");
+                AnsiConsole.Exception(ex);
+            }
         }
 
-        internal static async Task MultiDownload(string Package, string Location, TTFSDataClass? TTFSData = null)
+        if (Context != null)
         {
-            ProgressStatisticClass.StatusText = "Fetching packages...";
+            await DownloadFilesFunc(Context);
+            SaveFunc(MIXPackage, TPI, Context);
+        }
+        else
+        {
+            await AnsiConsole.Progress()
+                .AutoClear(true)
+                .Columns(new SpinnerColumn(), new TaskDescriptionColumn(), new ProgressBarColumn(), new PercentageColumn(), new RemainingTimeColumn())
+                .StartAsync(DownloadFilesFunc);
+            
+            AnsiConsole.Progress()
+                .AutoClear(true)
+                .Columns(new SpinnerColumn(), new TaskDescriptionColumn(), new ProgressBarColumn(), new PercentageColumn(), new RemainingTimeColumn())
+                .Start(ctx => SaveFunc(MIXPackage, TPI, ctx));
+        }
 
-            if (TTFSData == null)
+        GC.Collect();
+
+        AnsiConsole.MarkupLine($"[green][bold]+[/][/] {TPI.PackageName} [dim]({TPI.PackageID})[/]");
+    }
+    
+    internal static async Task<TTFSDataClass?> InternalFetchPackagesAsync(string Location)
+    {
+        try
+        {
+            byte[] Data = await WebDownloader.GetBytesAsync($"{Location}/packages.dat", string.Empty);
+            return TTFSClass.FromBytes(Data);
+        }
+        catch (Exception ex)
+        {
+            if (ex is HttpRequestException httpex)
             {
-                try
-                {
-                    byte[] Data = await WebDownloader.GetBytesAsync($"{Location}/packages.dat");
-                    TTFSData = TTFSClass.FromBytes(Data);
-                }
-                catch (HttpRequestException httpex)
-                {
-                    int Status = ExceptionToHTTPCode(httpex);
+                var Status = ExceptionToHTTPCode(httpex);
 
-                    if (Status > 0)
-                    {
-                        PrintHTTPErrorInfo(Status);
-                        ProgressStatisticClass.IsDone = true;
-                    }
-                    else
-                    {
-                        ConsoleOutputList.Add($"Error: {httpex.Message}");
-                        ProgressStatisticClass.IsDone = true;
-                    }
-
-                    return;
-                }
-                catch (Exception ex)
+                if (Status > 0)
                 {
-                    ConsoleOutputList.Add($"Error: {ex.Message}");
-                    ProgressStatisticClass.IsDone = true;
-                    return;
+                    PrintHTTPErrorInfo(Status);
+                    return null;
                 }
             }
+            
+            AnsiConsole.Exception(ex);
+            return null;
+        }
+    }
+    
+    internal static async Task Convert(string Package)
+    {
+        if (!CheckFields(out var TTFSData) || TTFSData is not { } TTFS)
+        {
+            return;
+        }
 
-            TTFSDataClass TTFS = TTFSData.Value;
-
-            if (!ProgressStatisticClass.IsDone)
+        TPIPackageClass? TPI = null;
+        
+        AnsiConsole.Status()
+            .Start("Locating...", ctx =>
             {
-                var Matches = TTFS.Packages.Where(x =>
+                FindPackageFunc(Package, TTFS, out TPI);
+            });
+
+        if (!TPI.HasValue)
+        {
+            return;
+        }
+
+        await InternalConvertPackageAsync(TPI.Value);
+    }
+
+    internal static async Task ConvertAll()
+    {
+        if (!CheckFields(out var TTFSData) || TTFSData is not { } TTFS)
+        {
+            return;
+        }
+
+        await AnsiConsole.Progress()
+            .AutoClear(true)
+            .Columns(new SpinnerColumn(), new TaskDescriptionColumn(), new ProgressBarColumn(), new PercentageColumn(), new RemainingTimeColumn())
+            .StartAsync(async ctx =>
+            {
+                var task = ctx.AddTask("Converting all packages...", maxValue: TTFS.PackageCount);
+
+                foreach (TPIPackageClass Package in TTFS.Packages)
+                {
+                    await InternalConvertPackageAsync(Package, ctx);
+                    task.Increment(1);
+                }
+            });
+    }
+    
+    internal static async Task MultiConvert(string Package)
+    {
+        if (!CheckFields(out var TTFSData) || TTFSData is not { } TTFS)
+        {
+            return;
+        }
+
+        TPIPackageClass[] Matches = [];
+
+        AnsiConsole.Status()
+            .Start("Locating...", ctx =>
+            {
+                Matches = TTFS.Packages.Where(x =>
                         x.PackageName.ToLower(Data.DefaultCulture).Contains(Package.ToLower(Data.DefaultCulture)) ||
                         x.PackageID.ToLower(Data.DefaultCulture).Contains(Package.ToLower(Data.DefaultCulture)))
                     .ToArray();
-
-                ProgressStatisticClass.MIXTotal = Matches.Length;
-
-                if (!Matches.Any())
-                {
-                    ConsoleOutputList.Add($"Couldn't find any package with specified identifier \"{Package}\".");
-                    ProgressStatisticClass.IsDone = true;
-
-                    return;
-                }
-
-                foreach (TPIPackageClass TTPackage in Matches)
-                {
-                    await Download(TTPackage.PackageID, Location, TTFS);
-                }
-            }
-
-            ProgressStatisticClass.IsDone = true;
-        }
-
-        internal static async Task DownloadAll(string Location, TTFSDataClass? TTFSData = null)
+            });
+        
+        if(Matches.Length == 0)
         {
-            ProgressStatisticClass.StatusText = "Fetching packages...";
-
-            if (TTFSData == null)
-            {
-                try
-                {
-                    byte[] Data = await WebDownloader.GetBytesAsync($"{Location}/packages.dat");
-                    TTFSData = TTFSClass.FromBytes(Data);
-                }
-                catch (HttpRequestException httpex)
-                {
-                    int Status = ExceptionToHTTPCode(httpex);
-
-                    if (Status > 0)
-                    {
-                        PrintHTTPErrorInfo(Status);
-                        ProgressStatisticClass.IsDone = true;
-                    }
-                    else
-                    {
-                        ConsoleOutputList.Add($"Error: {httpex.Message}");
-                        ProgressStatisticClass.IsDone = true;
-                    }
-
-                    return;
-                }
-                catch (Exception ex)
-                {
-                    ConsoleOutputList.Add($"Error: {ex.Message}");
-                    ProgressStatisticClass.IsDone = true;
-                    return;
-                }
-            }
-
-            TTFSDataClass TTFS = TTFSData.Value;
-
-            if (!ProgressStatisticClass.IsDone)
-            {
-                ProgressStatisticClass.MIXTotal = TTFS.PackageCount;
-
-                foreach (TPIPackageClass Pkg in TTFS.Packages)
-                {
-                    await Download(Pkg.PackageID, Location, TTFS);
-                }
-            }
-
-            ProgressStatisticClass.IsDone = true;
+            AnsiConsole.ErrorLine($"Couldn't find any package with specified identifier \"{Package}\".");
+            return;
         }
-        #endregion
+        
+        await AnsiConsole.Progress()
+            .AutoClear(true)
+            .Columns(new SpinnerColumn(), new TaskDescriptionColumn(), new ProgressBarColumn(), new PercentageColumn(), new RemainingTimeColumn())
+            .StartAsync(async ctx =>
+            {
+                var task = ctx.AddTask("Converting packages...", maxValue: Matches.Length);
+
+                foreach (TPIPackageClass Package in Matches)
+                {
+                    await InternalConvertPackageAsync(Package, ctx);
+                    task.Increment(1);
+                }
+            });
     }
+    
+    internal static async Task Download(string Package, string Location, int Count)
+    {
+        if (await InternalFetchPackagesAsync(Location) is not { } TTFS)
+        {
+            return;
+        }
+
+        TPIPackageClass? TPI = null;
+        
+        AnsiConsole.Status()
+            .Start("Locating...", ctx =>
+            {
+                FindPackageFunc(Package, TTFS, out TPI);
+            });
+
+        if (!TPI.HasValue)
+        {
+            return;
+        }
+
+        await InternalDownloadPackageAsync(Location, TPI.Value, Count);
+    }
+
+    internal static async Task MultiDownload(string Package, string Location, int Count)
+    {
+        if (await InternalFetchPackagesAsync(Location) is not { } TTFS)
+        {
+            return;
+        }
+
+        TPIPackageClass[] Matches = [];
+
+        AnsiConsole.Status()
+            .Start("Locating...", ctx =>
+            {
+                Matches = TTFS.Packages.Where(x =>
+                        x.PackageName.ToLower(Data.DefaultCulture).Contains(Package.ToLower(Data.DefaultCulture)) ||
+                        x.PackageID.ToLower(Data.DefaultCulture).Contains(Package.ToLower(Data.DefaultCulture)))
+                    .ToArray();
+            });
+        
+        if(Matches.Length == 0)
+        {
+            AnsiConsole.ErrorLine($"Couldn't find any package with specified identifier \"{Package}\".");
+            return;
+        }
+        
+        await AnsiConsole.Progress()
+            .AutoClear(true)
+            .Columns(new SpinnerColumn(), new TaskDescriptionColumn(), new ProgressBarColumn(), new PercentageColumn(), new RemainingTimeColumn())
+            .StartAsync(async ctx =>
+            {
+                var task = ctx.AddTask("Downloading packages...", maxValue: Matches.Length);
+
+                foreach (TPIPackageClass Package in Matches)
+                {
+                    await InternalDownloadPackageAsync(Location, Package, Count, ctx);
+                    task.Increment(1);
+                }
+            });
+    }
+    
+    internal static async Task DownloadAll(string Location, int Count)
+    {
+        if (await InternalFetchPackagesAsync(Location) is not { } TTFS)
+        {
+            return;
+        }
+
+        await AnsiConsole.Progress()
+            .AutoClear(true)
+            .Columns(new SpinnerColumn(), new TaskDescriptionColumn(), new ProgressBarColumn(), new PercentageColumn(), new RemainingTimeColumn())
+            .StartAsync(async ctx =>
+            {
+                var task = ctx.AddTask("Downloading all packages...", maxValue: TTFS.PackageCount);
+
+                foreach (TPIPackageClass Package in TTFS.Packages)
+                {
+                    await InternalDownloadPackageAsync(Location, Package, Count, ctx);
+                    task.Increment(1);
+                }
+            });
+    }
+
+    #endregion
 }

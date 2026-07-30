@@ -9,128 +9,122 @@
 */
 
 
-using System;
-using System.Globalization;
-using System.IO;
-using System.Reflection;
+namespace Ttfs2Mix;
 
-namespace Ttfs2Mix
+public struct PathsStruct
 {
-    public struct PathsStruct
-    {
-        public string FileBase { get; internal set; }
-        public string FileClient { get; internal set; }
-        public string FileFDS { get; internal set; }
-        public bool UseRenFolder { get; internal set; }
-    }
+    public string FileBase { get; internal set; }
+    public string FileClient { get; internal set; }
+    public string FileFDS { get; internal set; }
+    public bool UseRenFolder { get; internal set; }
+}
 
-    internal static class Data
-    {
-        public static CultureInfo DefaultCulture => CultureInfo.InvariantCulture; // To fix upper-lower wrong character issues.
-        public static string ExeLocation => Path.GetDirectoryName(AppContext.BaseDirectory);
+internal static class Data
+{
+    public static CultureInfo DefaultCulture => CultureInfo.InvariantCulture; // To fix upper-lower wrong character issues.
+    public static string WorkingDirectory => Environment.CurrentDirectory;
 
-        public static PathsStruct ReadPaths()
+    public static PathsStruct ReadPaths()
+    {
+        //For paths
+        string fBase = "Renegade";
+        string fClient = "Client";
+        string fFDS = "FDS";
+        bool useRenFolder = false;
+
+        if (File.Exists(Path.Combine(WorkingDirectory, "data", "paths.ini")))
         {
-            //For paths
-            string fBase = "Renegade";
-            string fClient = "Client";
-            string fFDS = "FDS";
-            bool useRenFolder = false;
-
-            if (File.Exists(Path.Combine(ExeLocation, "data", "paths.ini")))
+            using (StreamReader fs = File.OpenText(Path.Combine(WorkingDirectory, "data", "paths.ini")))
             {
-                using (StreamReader fs = File.OpenText(Path.Combine(ExeLocation, "data", "paths.ini")))
+                bool isValidPaths = false;
+
+                while (!fs.EndOfStream)
                 {
-                    bool isValidPaths = false;
-
-                    while (!fs.EndOfStream)
+                    string buf = fs.ReadLine();
+                    if (buf.ToLower(DefaultCulture).Equals("[paths]"))
                     {
-                        string buf = fs.ReadLine();
-                        if (buf.ToLower(DefaultCulture).Equals("[paths]"))
-                        {
-                            isValidPaths = true;
-                        }
-                        else if(isValidPaths)
-                        {
-                            string Key = buf.Substring(0, buf.IndexOf('='));
-                            string Value = buf.Remove(0, Key.Length + 1);
+                        isValidPaths = true;
+                    }
+                    else if(isValidPaths)
+                    {
+                        string Key = buf.Substring(0, buf.IndexOf('='));
+                        string Value = buf.Remove(0, Key.Length + 1);
 
-                            switch (Key.ToLower(DefaultCulture))
-                            {
-                                case "filebase":
-                                    fBase = Value;
-                                    break;
-                                case "fileclient":
-                                    fClient = Value;
-                                    break;
-                                case "filefds":
-                                    fFDS = Value;
-                                    break;
-                                case "userenfolder":
-                                    useRenFolder = Value == "true" || Value == "1";
-                                    break;
-                            }
+                        switch (Key.ToLower(DefaultCulture))
+                        {
+                            case "filebase":
+                                fBase = Value;
+                                break;
+                            case "fileclient":
+                                fClient = Value;
+                                break;
+                            case "filefds":
+                                fFDS = Value;
+                                break;
+                            case "userenfolder":
+                                useRenFolder = Value == "true" || Value == "1";
+                                break;
                         }
                     }
                 }
             }
-
-            return new PathsStruct
-            {
-                FileBase = fBase,
-                FileClient = fClient,
-                FileFDS = fFDS,
-                UseRenFolder = useRenFolder
-            };
         }
 
-        public static string GetTTFSDirectory(PathsStruct Paths)
+        return new PathsStruct
         {
-            try
+            FileBase = fBase,
+            FileClient = fClient,
+            FileFDS = fFDS,
+            UseRenFolder = useRenFolder
+        };
+    }
+
+    public static string GetTTFSDirectory(PathsStruct Paths)
+    {
+        try
+        {
+            if (Paths.UseRenFolder)
             {
-                if (Paths.UseRenFolder)
+                if (Directory.Exists(Path.Combine(WorkingDirectory, Paths.FileBase, Paths.FileClient))) //Client
                 {
-                    if (Directory.Exists(Path.Combine(ExeLocation, Paths.FileBase, Paths.FileClient))) //Client
-                    {
-                        return Path.Combine(ExeLocation, Paths.FileBase, Paths.FileClient, "ttfs");
-                    }
-                    else if (Directory.Exists(Path.Combine(ExeLocation, Paths.FileBase, Paths.FileFDS))) //Server
-                    {
-                        return Path.Combine(ExeLocation, Paths.FileBase, Paths.FileFDS, "ttfs");
-                    }
-                    else
-                    {
-                        return null;
-                    }
+                    return Path.Combine(WorkingDirectory, Paths.FileBase, Paths.FileClient, "ttfs");
+                }
+                else if (Directory.Exists(Path.Combine(WorkingDirectory, Paths.FileBase, Paths.FileFDS))) //Server
+                {
+                    return Path.Combine(WorkingDirectory, Paths.FileBase, Paths.FileFDS, "ttfs");
                 }
                 else
-                {
-                    var AppData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-
-                    if (Directory.Exists(Path.Combine(AppData, Paths.FileBase, Paths.FileClient))) //Client
-                    {
-                        return Path.Combine(AppData, Paths.FileBase, Paths.FileClient, "ttfs");
-                    }
-                    else if (Directory.Exists(Path.Combine(ExeLocation, Paths.FileBase, Paths.FileFDS))) //This case will be always server.
-                    {
-                        return Path.Combine(ExeLocation, Paths.FileBase, Paths.FileFDS, "ttfs");
-                    }
-                    else
-                    {
-                        return null;
-                    }
-                }
-            }
-            catch(Exception ex)
-            {
-                if (ex is ArgumentException or ArgumentNullException)
                 {
                     return null;
                 }
+            }
+            else
+            {
+                var AppData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+
+                if (Directory.Exists(Path.Combine(AppData, Paths.FileBase, Paths.FileClient))) //Client
+                {
+                    return Path.Combine(AppData, Paths.FileBase, Paths.FileClient, "ttfs");
+                }
+                else if (Directory.Exists(Path.Combine(WorkingDirectory, Paths.FileBase, Paths.FileFDS))) //This case will be always server.
+                {
+                    return Path.Combine(WorkingDirectory, Paths.FileBase, Paths.FileFDS, "ttfs");
+                }
                 else
                 {
-                    throw;
+                    return null;
                 }
+            }
+        }
+        catch(Exception ex)
+        {
+            if (ex is ArgumentException or ArgumentNullException)
+            {
+                return null;
+            }
+            else
+            {
+                throw;
             }
         }
     }
