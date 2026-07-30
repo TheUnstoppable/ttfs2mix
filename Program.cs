@@ -187,7 +187,7 @@ public class Ttfs2MixHelpProvider : HelpProvider
 public class Ttfs2Mix
 {
     public const string Name = nameof(Ttfs2Mix);
-    public const string Version = "1.2";
+    public const string Version = "1.3";
     public const string Authors = "Unstoppable";
 
     public static void PrintSplash()
