@@ -48,7 +48,7 @@ public class ConvertAllCommand : Command<ConvertAllCommand.Settings>
     }
 }
 
-[Description("Converts all matched TTFS packages to MIX files and saves into data folder.")]
+[Description("Converts all matching TTFS packages to MIX files and saves into data folder.")]
 public class MultiConvertCommand : Command<MultiConvertCommand.Settings>
 {
     public class Settings : CommandSettings
@@ -123,7 +123,7 @@ public class DownloadAllCommand : Command<DownloadAllCommand.Settings>
     }
 }
 
-[Description("Finds and downloads all matched TTFS packages from a remote repository to MIX files and saves into data folder.")]
+[Description("Finds and downloads all matching TTFS packages from a remote repository to MIX files and saves into data folder.")]
 public class MultiDownloadCommand : Command<MultiDownloadCommand.Settings>
 {
     public class Settings : CommandSettings
@@ -164,10 +164,12 @@ public class Ttfs2MixHelpProvider : HelpProvider
         var list = base.GetHeader(model, command)
             .ToList();
         
-        list.AddRange(new FigletText(Ttfs2Mix.Name),
-            new Markup($"{Ttfs2Mix.Name} is an application to convert TTFS packages into MIX files. Supports conversions on both client and FDS." + Environment.NewLine),
+        list.AddRange(new Rule(),
+            new FigletText(Ttfs2Mix.Name),
+            new Markup($"{Ttfs2Mix.Name} is an application to convert TTFS packages back to MIX/PKG files. Supports conversions on both client and FDS." + Environment.NewLine),
             new Markup($"{Ttfs2Mix.Name} has to be placed inside the client or FDS folder, alongside 'game.exe' or 'server.exe'. Converted maps will be saved to the Data folder." + Environment.NewLine),
             new Markup(Environment.NewLine),
+            new Markup($"[blue]{Ttfs2Mix.Name}[/] is licensed under [bold]GNU General Public License v3.0[/]. Please view [b]LICENSE[/] file for details." + Environment.NewLine),
             new Markup($"[blue]{Ttfs2Mix.Name}[/] uses the following open-source libraries and code snippets:" + Environment.NewLine),
             new Rows(
                 new Markup("[bold]MixLibrary[/] [dim]by[/] The Unstoppable"),
@@ -181,6 +183,11 @@ public class Ttfs2MixHelpProvider : HelpProvider
         );
 
         return list;
+    }
+
+    public override IEnumerable<IRenderable> GetFooter(ICommandModel model, ICommandInfo command)
+    {
+        return base.GetFooter(model, command).Append(new Rule());
     }
 }
 
@@ -314,8 +321,9 @@ public class Ttfs2Mix
         ms.Position = 0;
         task.MaxValue = ms.Length;
         task.IsIndeterminate = false;
-                
-        var loc = Path.Combine(Data.WorkingDirectory, "data", $"{TPI.PackageName}.mix");
+
+        var isMod = MIXPackage.Files.Count(x => x.FileName.EndsWith(".lsd", StringComparison.OrdinalIgnoreCase)) > 1;
+        var loc = Path.Combine(Data.WorkingDirectory, "data", $"{TPI.PackageName}.{(isMod ? "pkg" : "mix")}");
         using var fs = new FileStream(loc, FileMode.Create, FileAccess.Write);
                 
         fs.SetLength(ms.Length);
