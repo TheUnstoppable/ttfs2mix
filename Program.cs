@@ -175,9 +175,7 @@ public class Ttfs2MixHelpProvider : HelpProvider
                 new Markup("[bold]MixLibrary[/] [dim]by[/] The Unstoppable"),
                 new Markup("[bold]Spectre.Console.Cli[/] [dim]by[/] Patrik Svensson, Phil Scott, Nils Andresen, Cédric Luthi"),
                 new Markup("[bold]TTPackageClass[/] [dim]by[/] The Unstoppable"),
-                new Markup("https://www.codeproject.com/Articles/528178/Load-DLL-From-Embedded-Resource"),
-                new Markup("https://stackoverflow.com/a/14488941/5791443"),
-                new Markup("https://stackoverflow.com/a/1080445/5791443")
+                new Markup("https://stackoverflow.com/a/14488941/5791443")
             ),
             new Rule()
         );
@@ -205,12 +203,6 @@ public class Ttfs2Mix
     public static int Main(string[] args)
     {
         PrintSplash();
-        
-        EmbeddedAssembly.Load("Ttfs2Mix.MixLibrary.dll", "MixLibrary.dll");
-        EmbeddedAssembly.Load("Ttfs2Mix.TTPackageClass.dll", "TTPackageClass.dll");
-
-        //Load dependencies from embedded resource, to make it a single executable file.
-        AppDomain.CurrentDomain.AssemblyResolve += (_, e) => EmbeddedAssembly.Get(e.Name);
 
         var app = new CommandApp();
         
